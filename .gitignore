@@ -1,0 +1,12 @@
+node_modules/
+dist/
+*.local
+.env*
+!.env.example
+*.tsbuildinfo
+test-results/
+playwright-report/
+.qa/
+server/web/
+server/homenet-doctor*
+!server/homenet-doctor.init
