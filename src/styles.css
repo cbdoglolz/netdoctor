@@ -2585,3 +2585,23 @@ dd {
 .topology-canvas:has(.layout-tools) .react-flow__controls{bottom:155px;}
 .alignment-guides{position:absolute;inset:0;z-index:4;pointer-events:none;overflow:hidden;}
 .source-card{background:#f7faff;border:1px solid #e6edf6;border-radius:10px;padding:15px;min-width:220px;flex:1;}.source-card small{color:#8190a5;}
+
+.control-page { display:grid; gap:20px; min-width:0; }
+.control-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px; }
+.control-form { display:grid; gap:16px; padding:20px; min-width:0; }
+.control-form label,.control-time { display:grid; gap:8px; }
+.control-form input,.control-form select { width:100%; min-width:0; padding:11px; border:1px solid #dce5ef; border-radius:8px; background:white; color:inherit; }
+.control-time { grid-template-columns:1fr 1fr; gap:12px; }
+.control-message { margin:12px 20px; padding:12px; border-radius:8px; background:#edf5ff; overflow-wrap:anywhere; }
+.control-message.error { background:#fff1ec; color:#a44124; }
+.control-record { border:1px solid #e3eaf3; padding:15px; border-radius:10px; min-width:0; overflow-wrap:anywhere; }
+.control-record p { margin:8px 0; }
+.control-record small { display:block; color:#718198; margin:6px 0; }
+.control-record pre { white-space:pre-wrap; overflow-wrap:anywhere; max-height:440px; overflow:auto; font-size:12px; background:#f5f8fc; padding:12px; border-radius:8px; }
+.control-record summary { cursor:pointer; }
+.control-form .button-row { display:flex; flex-wrap:wrap; gap:8px; }
+@media(max-width:760px) { .control-grid { grid-template-columns:1fr; } .control-form { padding:16px; } }
+
+.control-page .panel-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:20px 20px 12px; }
+.control-page .panel-heading h2 { margin:0; font-size:15px; font-weight:600; }
+.control-kind { font-size:11px; color:#3473ba; background:#eff6ff; border-radius:6px; padding:5px 8px; white-space:nowrap; }

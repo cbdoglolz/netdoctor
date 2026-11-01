@@ -1,3 +1,4 @@
+import DeviceControl from './DeviceControl';
 import Peers from './Peers';
 import Connections from './Connections';
 import {compareDevices} from './device-sort';
@@ -69,6 +70,7 @@ const pages = [
   { id: 'traffic', title: '流量与访问', icon: Activity },
   { id: 'alerts', title: '告警与诊断', icon: Bell },
   { id: 'path', title: '路径验证', icon: Network },
+  { id: 'control', title: '设备控制', icon: SlidersHorizontal },
   { id: 'peers', title: '节点联动', icon: Network },
   { id: 'settings', title: '设置', icon: Settings2 },
 ] as const;
@@ -153,6 +155,7 @@ export default function App() {
   const [scenario, setScenario] = useState<Scenario>('normal');
   const [range, setRange] = useState<Range>('24h');
   const [quality, setQuality] = useState(false);
+  const [controlIP,setControlIP]=useState('');
   const [selected, setSelected] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
   const [search, setSearch] = useState('');
@@ -350,8 +353,8 @@ export default function App() {
           <div className="demo-toolbar">
             <div className="demo-toolbar-label">
               <SlidersHorizontal size={16} />
-              <strong>{live ? '真实只读采集' : '体验演示'}</strong>
-              <span>{live ? '每 10 秒刷新 · 不修改网络配置' : '切换场景，查看诊断如何变化'}</span>
+              <strong>{live ? '真实采集' : '体验演示'}</strong>
+              <span>{live ? '每 10 秒刷新 · 控制操作需手动发起' : '切换场景，查看诊断如何变化'}</span>
             </div>
             {!live && (
               <div className="demo-selects">
@@ -1068,6 +1071,7 @@ export default function App() {
             </>
           )}
 
+          {page === 'control' && (live ? <DeviceControl initialIP={controlIP}/> : <p>设备控制仅在真实采集服务中提供。</p>)}
           {page === 'peers' && (live ? <Peers/> : <p>节点联动仅在真实采集服务中提供。</p>)}
           {page === 'path' && <PathObservation live={live} />}
           {page === 'settings' && (
@@ -1091,7 +1095,7 @@ export default function App() {
             </span>
             <span>
               HomeNet Doctor · v{packageInfo.version} ·{' '}
-              {live ? '真实只读采集测试版' : '所有数据均为演示'}
+              {live ? '真实采集与受限控制测试版' : '所有数据均为演示'}
             </span>
           </footer>
         </main>
@@ -1123,6 +1127,7 @@ export default function App() {
       )}
       {currentDevice && (
         <DeviceDetails
+          onControl={()=>{setControlIP(currentDevice.ip);setSelected(null);navigate('control');}}
           onConnections={()=>{setTrafficDevice(currentDevice.id);setSelected(null);navigate('traffic');}}
           live={live}
           device={currentDevice}
@@ -1181,6 +1186,7 @@ function MetricCard({
 }
 
 function DeviceDetails({
+ onControl,
  onConnections,
   live,
   device: d,
@@ -1188,6 +1194,7 @@ function DeviceDetails({
   onClose,
   onAlert,
 }: {
+  onControl: () => void;
   onConnections: () => void;
   live: boolean;
   device: Device;
@@ -1218,6 +1225,7 @@ function DeviceDetails({
         </header>
         <div className="drawer-body">
           <div className="device-hero">
+            {live && <button className="button small" onClick={onControl}>管理上网与诊断</button>}
             {live && <button className="button small" onClick={onConnections}>查看当前可见连接</button>}
             <DeviceEditor device={d} live={live} />
             {live && d.id!=='doctor' && d.ip!=='node-internet' && <DeleteDevice ip={d.ip}/>}

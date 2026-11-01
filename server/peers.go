@@ -178,6 +178,10 @@ func localPeerPayload() peerPayload {
 	return peerPayload{1, c.ID, c.Name, version, snapshot, notes}
 }
 func peerReadHandler(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == "/control" {
+		peerControlHandler(w, r)
+		return
+	}
 	w.Header().Set("Cache-Control", "no-store")
 	if r.Method != "GET" || r.URL.Path != "/snapshot" {
 		reply(w, 405, map[string]string{"error": "只允许读取节点快照"})
@@ -193,8 +197,7 @@ func peerReadHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	reply(w, 200, localPeerPayload())
 }
-func fetchPeer(ctx context.Context, p peerTarget) (peerPayload, error) {
-	var data peerPayload
+func pinnedPeerClient(p peerTarget) (*http.Client, func()) {
 	tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12, InsecureSkipVerify: true, VerifyConnection: func(cs tls.ConnectionState) error {
 		if len(cs.PeerCertificates) == 0 {
 			return fmt.Errorf("节点未提供证书")
@@ -210,8 +213,13 @@ func fetchPeer(ctx context.Context, p peerTarget) (peerPayload, error) {
 		return nil
 	}}
 	tr := &http.Transport{TLSClientConfig: tlsConfig, DialContext: (&net.Dialer{Timeout: 4 * time.Second}).DialContext}
-	defer tr.CloseIdleConnections()
 	client := &http.Client{Transport: tr, Timeout: 6 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return fmt.Errorf("拒绝节点重定向") }}
+	return client, tr.CloseIdleConnections
+}
+func fetchPeer(ctx context.Context, p peerTarget) (peerPayload, error) {
+	var data peerPayload
+	client, closeClient := pinnedPeerClient(p)
+	defer closeClient()
 	req, _ := http.NewRequestWithContext(ctx, "GET", strings.TrimRight(p.URL, "/")+"/snapshot", nil)
 	req.Header.Set("Authorization", "Bearer "+p.Token)
 	resp, e := client.Do(req)

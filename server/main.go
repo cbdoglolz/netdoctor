@@ -29,7 +29,7 @@ import (
 
 //go:embed web/*
 var web embed.FS
-var version = "0.3.8"
+var version = "0.4.0"
 var sessionPattern = regexp.MustCompile(`^[a-fA-F0-9]{32}$`)
 
 const base = "/opt/homenet-doctor"
@@ -102,6 +102,17 @@ func main() {
 	} else {
 		go func() { defer close(peersDone); runPeers(ctx) }()
 	}
+	controlDone := make(chan struct{})
+	if err := initControl(engine.dir); err != nil {
+		log.Printf("Control disabled: %v", err)
+		controls.Lock()
+		controls.settings.Enabled = false
+		controls.err = err.Error()
+		controls.Unlock()
+		close(controlDone)
+	} else {
+		go func() { defer close(controlDone); runControls(ctx) }()
+	}
 	go engine.run(ctx)
 	connectionsDone := make(chan struct{})
 	go func() { defer close(connectionsDone); runConnections(ctx) }()
@@ -132,6 +143,7 @@ func main() {
 	mux.HandleFunc("/api/changes", changesAPI)
 	mux.HandleFunc("/api/connections", connectionsAPI)
 	mux.HandleFunc("/api/peers", peersAPI)
+	mux.HandleFunc("/api/control", controlAPI)
 	mux.HandleFunc("/api/path-observation", pathObservationAPI)
 	mux.HandleFunc("/api/history", historyAPI)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -165,6 +177,7 @@ func main() {
 		<-presenceDone
 		<-connectionsDone
 		<-peersDone
+		<-controlDone
 		shutdown, stop := context.WithTimeout(context.Background(), 5*time.Second)
 		defer stop()
 		server.Shutdown(shutdown)
