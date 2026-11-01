@@ -325,6 +325,8 @@ export function Topology({
   const [showUnlinked, setShowUnlinked] = useState(false);
   const [collapsed,setCollapsed]=useState<string[]>([]);
   const [snap,setSnap]=useState(true);
+  const [viewport,setViewport]=useState({x:0,y:0,zoom:1});
+  const [guides,setGuides]=useState<{x?:number;y?:number}>({});
   const [undo,setUndo]=useState<Record<string,{x:number;y:number}>[]>([]);
   const [redo,setRedo]=useState<Record<string,{x:number;y:number}>[]>([]);
   const [locked,setLocked]=useState<string[]>([]);
@@ -558,13 +560,16 @@ export function Topology({
         </div>
       )}
       {!compact && snapshot.live && <div className="layout-tools"><button className="button small" disabled={!layoutReady} onClick={()=>setEditing(!editing)}>{editing?'完成拖动':'调整布局'}</button><button className="button small" disabled={!layoutReady} onClick={()=>void saveLayout()}>保存布局</button><button className="button small" disabled={!layoutReady} onClick={()=>void saveLayout(true)}>恢复自动分层</button><button className="button small" onClick={()=>setSnap(!snap)}>{snap?'吸附已开启':'吸附已关闭'}</button><button className="button small" disabled={!undo.length} onClick={()=>{setRedo(v=>[...v,positions]);setPositions(undo[undo.length-1]);setUndo(v=>v.slice(0,-1));}}>撤销</button><button className="button small" disabled={!redo.length} onClick={()=>{setUndo(v=>[...v,positions]);setPositions(redo[redo.length-1]);setRedo(v=>v.slice(0,-1));}}>重做</button><small role="status">{layoutMessage || (editing?'拖动后保存；Shift 框选批量移动；双击节点锁定／解锁（本次页面）。':'终端统一置于最下层；上网路径与物理连接分开。')}</small></div>}
-      {!compact&&groups.length>0&&<div className="group-tools">{groups.map(g=><button className="chip" key={g} onClick={()=>setCollapsed(v=>v.includes(g)?v.filter(x=>x!==g):[...v,g])}>{collapsed.includes(g)?'展开':'折叠'} {g}</button>)}</div>}
+      {!compact&&groups.length>0&&<div className="group-tools">{groups.map(g=><span key={g}><button className="chip" onClick={()=>setCollapsed(v=>v.includes(g)?v.filter(x=>x!==g):[...v,g])}>{collapsed.includes(g)?'展开':'折叠'} {g}</button><button className="chip" onClick={()=>{setUndo(v=>[...v.slice(-29),positions]);setRedo([]);setCollapsed(v=>v.filter(x=>x!==g));const members=snapshot.devices.filter(d=>d.group===g);const bottom=Math.max(0,...flowNodes.filter(n=>!members.some(d=>d.id===n.id)).map(n=>n.position.y))+150;setPositions(p=>({...p,...Object.fromEntries(members.map((d,i)=>[d.id,{x:(i%4)*190,y:bottom+Math.floor(i/4)*150}]))}));setLayoutEpoch(v=>v+1);}}>整理本组</button></span>)}</div>}
+      {editing && <div className="alignment-guides">{guides.x!==undefined&&<i style={{position:'absolute',left:viewport.x+guides.x*viewport.zoom,top:0,bottom:0,borderLeft:'1px dashed #3182f6'}}/>}{guides.y!==undefined&&<i style={{position:'absolute',top:viewport.y+guides.y*viewport.zoom,left:0,right:0,borderTop:'1px dashed #3182f6'}}/>}</div>}
       <ReactFlow
         key={`${snapshot.mode}-${filter}-${compact}-${layer}-${showUnlinked}-${Math.round(size.width)}-${Math.round(size.height)}-${nodes.map(n=>n.id).sort().join(",")}`}
         nodes={flowNodes}
         onNodesChange={onFlowNodesChange}
         onSelectionDragStop={(_,selected)=>{setUndo(v=>[...v.slice(-29),positions]);setRedo([]);setPositions(p=>({...p,...Object.fromEntries(selected.map(n=>[n.id,n.position]))}));}}
-        onNodeDragStop={(_,node)=>{setUndo(v=>[...v.slice(-29),positions]);setRedo([]);let {x,y}=node.position;if(snap)for(const n of flowNodes)if(n.id!==node.id){if(Math.abs(n.position.x-x)<12)x=n.position.x;if(Math.abs(n.position.y-y)<12)y=n.position.y;}setPositions(p=>({...p,[node.id]:{x,y}}));}}
+        onMove={(_,v)=>setViewport(v)}
+        onNodeDrag={(_,node)=>{const g:{x?:number;y?:number}={};if(snap)for(const n of flowNodes)if(n.id!==node.id){if(Math.abs(n.position.x-node.position.x)<12)g.x=n.position.x;if(Math.abs(n.position.y-node.position.y)<12)g.y=n.position.y;}setGuides(g);}}
+        onNodeDragStop={(_,node)=>{setGuides({});setUndo(v=>[...v.slice(-29),positions]);setRedo([]);let {x,y}=node.position;if(snap)for(const n of flowNodes)if(n.id!==node.id){if(Math.abs(n.position.x-x)<12)x=n.position.x;if(Math.abs(n.position.y-y)<12)y=n.position.y;}setPositions(p=>({...p,[node.id]:{x,y}}));}}
         zoomOnDoubleClick={!editing}
         snapToGrid={snap} snapGrid={[20,20]} selectionOnDrag={editing}
         onNodeDoubleClick={(_,node)=>{if(editing)setLocked(v=>v.includes(node.id)?v.filter(x=>x!==node.id):[...v,node.id]);}}

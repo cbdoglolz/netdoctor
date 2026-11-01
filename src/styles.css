@@ -2583,3 +2583,4 @@ dd {
 .topology-canvas:has(.layout-tools) .react-flow__controls { bottom: 95px; }
 .group-tools{position:absolute;top:55px;left:12px;right:12px;z-index:5;display:flex;gap:6px;flex-wrap:wrap;}
 .topology-canvas:has(.layout-tools) .react-flow__controls{bottom:155px;}
+.alignment-guides{position:absolute;inset:0;z-index:4;pointer-events:none;overflow:hidden;}

@@ -154,8 +154,9 @@ export default function App() {
   const [notice, setNotice] = useState('');
   const [search, setSearch] = useState('');
   const [kind, setKind] = useState('all');
-  const [sortKey,setSortKey]=useState('ip');
-  const [sortDir,setSortDir]=useState(1);
+  const [sortKey,setSortKey]=useState(()=>{try{return localStorage.getItem('hnd-sort-key')||'ip'}catch{return 'ip'}});
+  const [sortDir,setSortDir]=useState(()=>{try{return localStorage.getItem('hnd-sort-dir')==='-1'?-1:1}catch{return 1}});
+ useEffect(()=>{try{localStorage.setItem('hnd-sort-key',sortKey);localStorage.setItem('hnd-sort-dir',String(sortDir));}catch{}},[sortKey,sortDir]);
   const [status, setStatus] = useState('all');
   const [topologyFilter, setTopologyFilter] = useState('all');
   const [trafficDevice, setTrafficDevice] = useState('all');
