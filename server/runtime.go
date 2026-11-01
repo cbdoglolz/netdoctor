@@ -61,6 +61,7 @@ type probeResult struct {
 	Failures int
 }
 type runtimeEngine struct {
+	sampleMu     sync.Mutex
 	mu           sync.RWMutex
 	config       runtimeConfig
 	db           *sql.DB
@@ -156,7 +157,7 @@ func openEngine(dir string) (*runtimeEngine, error) {
 		return nil, e
 	}
 	db.SetMaxOpenConns(1)
-	_, e = db.Exec(`PRAGMA journal_mode=WAL; PRAGMA busy_timeout=3000; CREATE TABLE IF NOT EXISTS path_presence(id INTEGER PRIMARY KEY,payload TEXT); CREATE TABLE IF NOT EXISTS path_reports(id TEXT PRIMARY KEY,created INTEGER,payload TEXT); CREATE TABLE IF NOT EXISTS samples(ts INTEGER PRIMARY KEY,payload TEXT NOT NULL); CREATE TABLE IF NOT EXISTS usage(ts INTEGER,identity TEXT,rx REAL,tx REAL,PRIMARY KEY(ts,identity)); CREATE TABLE IF NOT EXISTS identities(mac TEXT PRIMARY KEY,ip TEXT,name TEXT,kind TEXT,model TEXT); CREATE INDEX IF NOT EXISTS usage_time ON usage(ts); CREATE TABLE IF NOT EXISTS accounting(ip TEXT PRIMARY KEY,rx REAL,tx REAL,ts INTEGER); CREATE TABLE IF NOT EXISTS events(ts INTEGER,identity TEXT,status TEXT); CREATE INDEX IF NOT EXISTS event_identity ON events(identity,ts);`)
+	_, e = db.Exec(`PRAGMA journal_mode=WAL; PRAGMA busy_timeout=3000; CREATE TABLE IF NOT EXISTS device_meta(ip TEXT PRIMARY KEY,first_seen TEXT,last_scan TEXT,marked_at TEXT,hidden INTEGER DEFAULT 0); CREATE TABLE IF NOT EXISTS ui_layout(id TEXT PRIMARY KEY,payload TEXT); CREATE TABLE IF NOT EXISTS path_presence(id INTEGER PRIMARY KEY,payload TEXT); CREATE TABLE IF NOT EXISTS path_reports(id TEXT PRIMARY KEY,created INTEGER,payload TEXT); CREATE TABLE IF NOT EXISTS samples(ts INTEGER PRIMARY KEY,payload TEXT NOT NULL); CREATE TABLE IF NOT EXISTS usage(ts INTEGER,identity TEXT,rx REAL,tx REAL,PRIMARY KEY(ts,identity)); CREATE TABLE IF NOT EXISTS identities(mac TEXT PRIMARY KEY,ip TEXT,name TEXT,kind TEXT,model TEXT); CREATE INDEX IF NOT EXISTS usage_time ON usage(ts); CREATE TABLE IF NOT EXISTS accounting(ip TEXT PRIMARY KEY,rx REAL,tx REAL,ts INTEGER); CREATE TABLE IF NOT EXISTS events(ts INTEGER,identity TEXT,status TEXT); CREATE INDEX IF NOT EXISTS event_identity ON events(identity,ts);`)
 	if e != nil {
 		db.Close()
 		return nil, e
@@ -232,6 +233,20 @@ func probe(ip string) probeResult {
 	return r
 }
 func (e *runtimeEngine) sample() {
+	e.sampleMu.Lock()
+	defer e.sampleMu.Unlock()
+	force := scanQueue.Swap(false)
+	if force {
+		e.discoveredAt = time.Time{}
+		e.nameAt = time.Time{}
+		scanStatus.Store("扫描中")
+	}
+	defer func() {
+		if force {
+			scanBusy.Store(false)
+			scanStatus.Store("扫描完成，返回 " + strconv.Itoa(len(e.discovered)) + " 台 ARP 响应；服务名称已刷新，手动备注保留。错误：" + scanText(&scanLastError))
+		}
+	}()
 	raw := collectRaw()
 	e.mu.RLock()
 	c := e.config
@@ -254,6 +269,8 @@ func (e *runtimeEngine) sample() {
 	}
 	for ip, mac := range e.discovered {
 		if d := byIP[ip]; d != nil {
+			d["mac"] = mac
+			delete(d, "macSource")
 			if now.Sub(e.discoveredAt) < 70*time.Second {
 				d["status"] = "online"
 			}
@@ -271,6 +288,7 @@ func (e *runtimeEngine) sample() {
 			devices = append(devices, d)
 		}
 	}
+	devices = e.inventoryMeta(devices, byIP, stamp)
 	settings := map[string]deviceConfig{}
 	for _, d := range c.Devices {
 		settings[d.IP] = d

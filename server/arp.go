@@ -22,6 +22,7 @@ func parseARP(text string) map[string]string {
 func discoverLAN(config []deviceConfig) map[string]string {
 	iface, err := net.InterfaceByName("br-lan")
 	if err != nil {
+		scanLastError.Store("找不到 br-lan，无法扫描")
 		return nil
 	}
 	addrs, _ := iface.Addrs()
@@ -32,6 +33,7 @@ func discoverLAN(config []deviceConfig) map[string]string {
 		}
 		bits, _ := n.Mask.Size()
 		if bits < 24 {
+			scanLastError.Store("扫描仅支持 /24 或更小的 IPv4 子网")
 			return nil
 		}
 		passive := map[string]bool{}
@@ -46,7 +48,12 @@ func discoverLAN(config []deviceConfig) map[string]string {
 				args = append(args, candidate.String())
 			}
 		}
-		out, _ := runTimeout(8*time.Second, args...)
+		out, scanErr := runTimeout(8*time.Second, args...)
+		if scanErr != nil {
+			scanLastError.Store(scanErr.Error())
+		} else {
+			scanLastError.Store("")
+		}
 		return parseARP(string(out))
 	}
 	return nil

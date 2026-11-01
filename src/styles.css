@@ -2576,3 +2576,7 @@ dd {
 .device-name .bypass-badge { margin-top: 5px; }
 .topology-node .bypass-badge { margin: 5px auto 0; font-size: 9px; }
 .path-last-seen { display: block; margin-top: 5px; color: #8895a6; font-size: 10px; }
+.layout-tools { position:absolute; z-index:6; left:12px;right:12px;bottom:8px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;background:#ffffffed;padding:8px;border-radius:9px; }
+.layout-tools small {font-size:10px; flex-basis:100%;color:#8793a4;}
+.inventory-controls {padding:12px 18px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+.inventory-controls small {flex-basis:100%;color:#8793a4;font-size:11px;}

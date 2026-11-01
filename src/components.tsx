@@ -45,6 +45,7 @@ import {
   MarkerType,
   ReactFlow,
   useReactFlow,
+  type NodeChange,
   useNodesInitialized,
   BaseEdge,
   getSmoothStepPath,
@@ -322,6 +323,21 @@ export function Topology({
 }) {
   const [layer, setLayer] = useState<'gateway' | 'physical'>('gateway');
   const [showUnlinked, setShowUnlinked] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({});
+  const [layoutMessage, setLayoutMessage] = useState('');
+  const [layoutReady, setLayoutReady] = useState(false);
+  const [layoutEpoch, setLayoutEpoch] = useState(0);
+  useEffect(()=>{
+    let disposed=false; setLayoutReady(false);setPositions({});setEditing(false);
+    if (!snapshot.live) {setLayoutReady(true);return;}
+    fetch(`/api/layout?layer=${layer}`).then(async r=>{if(!r.ok)throw Error('读取布局失败');return r.json()}).then(p=>{if(!disposed){setPositions(p);setLayoutReady(true);setLayoutEpoch(v=>v+1);}}).catch(e=>{if(!disposed)setLayoutMessage(String(e));});
+    return ()=>{disposed=true};
+  },[layer,snapshot.live]);
+  async function saveLayout(reset=false) {
+    const value=reset ? {} : Object.fromEntries(nodes.map(n=>[n.id, positions[n.id] || n.position]));
+    try { const r=await fetch(`/api/layout?layer=${layer}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(value)});const v=await r.json();if(!r.ok)throw Error(v.error);setPositions(value);setLayoutEpoch(v=>v+1);setLayoutMessage(v.message);setEditing(false); }catch(e){setLayoutMessage(String(e))}
+  }
   const container = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 900, height: 570 });
   useEffect(() => {
@@ -432,6 +448,10 @@ export function Topology({
       );
       const parent = layer === 'gateway' ? logicalParent : physicalParent;
       const rows = new Map<number, number>();
+      const infra = new Set(['gateway','switch','ap','hypervisor']);
+      const depths = new Map<string,number>();
+      for (const n of nodes) {let id=n.id,depth=0;const seen=new Set<string>();while(parent.has(id)&&!seen.has(id)&&depth<8){seen.add(id);id=parent.get(id)!;depth++;}depths.set(n.id,depth);}
+      const infrastructureDepth=Math.max(0,...nodes.filter(n=>infra.has(n.data.kind)).map(n=>depths.get(n.id)||0));
       let unlinked = 0;
       const count = nodes.filter((n) => !included.has(n.id)).length;
       const columns = Math.max(
@@ -448,14 +468,17 @@ export function Topology({
           depth++;
         }
         if (!included.has(n.id)) {
-          depth = 5;
+          depth = infrastructureDepth + 2;
         }
+        else if (!infra.has(n.data.kind) && ![...parent.values()].includes(n.id)) {depth=infrastructureDepth+1;}
         const col = rows.get(depth) || 0;
         rows.set(depth, col + 1);
         n.position = included.has(n.id)
           ? { x: col * 190, y: depth * 125 }
-          : { x: (unlinked % columns) * 190, y: (5 + Math.floor(unlinked++ / columns)) * 145 };
+          : { x: (unlinked % columns) * 190, y: (infrastructureDepth + 2 + Math.floor(unlinked++ / columns)) * 145 };
       }
+      const widest = Math.max(1,...[...rows.entries()].filter(([depth])=>depth<=infrastructureDepth+1).map(([,count])=>count));
+      for (const n of nodes) if(included.has(n.id)) {const depth=Math.round(n.position.y/125);n.position.x+=(widest-(rows.get(depth)||1))*95;}
       if (compact || !showUnlinked) {
         for (let i = nodes.length - 1; i >= 0; i--)
           if (!included.has(nodes[i].id)) nodes.splice(i, 1);
@@ -524,9 +547,11 @@ export function Topology({
           )}
         </div>
       )}
+      {!compact && snapshot.live && <div className="layout-tools"><button className="button small" disabled={!layoutReady} onClick={()=>setEditing(!editing)}>{editing?'完成拖动':'调整布局'}</button><button className="button small" disabled={!layoutReady} onClick={()=>void saveLayout()}>保存布局</button><button className="button small" disabled={!layoutReady} onClick={()=>void saveLayout(true)}>恢复自动分层</button><small role="status">{layoutMessage || (editing?'拖动节点调整位置，再保存；切换页面前请保存。':'终端统一置于最下层；上网路径与物理连接分开。')}</small></div>}
       <ReactFlow
         key={`${snapshot.mode}-${filter}-${compact}-${layer}-${showUnlinked}-${Math.round(size.width)}-${Math.round(size.height)}-${nodes.map(n=>n.id).sort().join(",")}`}
-        nodes={nodes}
+        nodes={nodes.map(n=>({...n,position:positions[n.id]||n.position}))}
+        onNodesChange={(changes:NodeChange[])=>{if(editing)setPositions(p=>{const next={...p};for(const c of changes)if(c.type==='position'&&c.position)next[c.id]=c.position;return next;});}}
         edges={edges}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
@@ -534,12 +559,12 @@ export function Topology({
         fitViewOptions={{ padding: compact ? 0.12 : 0.18 }}
         minZoom={0.015}
         maxZoom={1.6}
-        nodesDraggable={false}
+        nodesDraggable={editing && !compact}
         nodesConnectable={false}
-        onNodeClick={(_, node) => node.id !== 'internet' && onDevice(node.id)}
+        onNodeClick={(_, node) => !editing && node.id !== 'internet' && onDevice(node.id)}
       >
         <AutoFit
-          signature={nodes.map((n) => `${n.id}:${n.position.x}:${n.position.y}`).join('|')}
+          signature={nodes.map((n) => `${n.id}:${n.position.x}:${n.position.y}`).join('|')+layoutEpoch}
           width={size.width}
           height={size.height}
         />

@@ -33,6 +33,9 @@ export interface Observation<T> {
   observedAt: string;
 }
 export interface Device {
+  firstRecordedAt?: string;
+  lastScannedAt?: string;
+  annotatedAt?: string;
   id: string;
   name: string;
   ip: string;
@@ -206,7 +209,7 @@ const observation = <T>(
 ): Observation<T> => ({ value, availability, source, observedAt });
 export function displayMetric(metric: Observation<number>, unit = '') {
   return metric.availability === 'available' && metric.value !== null
-    ? `${metric.value}${unit}`
+    ? unit.trim() === 'GB' ? formatTraffic(metric.value) : `${metric.value}${unit}`
     : availabilityLabels[metric.availability];
 }
 export function normalizeSettings(input: unknown): Settings {
@@ -563,3 +566,10 @@ export const demoService: NetworkService = {
     };
   },
 };
+
+export function formatTraffic(gb: number): string {
+  const bytes = Math.max(0, gb * 1e9);
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = bytes > 0 ? Math.min(4, Math.floor(Math.log10(bytes) / 3)) : 0;
+  return `${Number((bytes / 1000 ** Math.max(0,i)).toFixed(2))} ${units[Math.max(0,i)]}`;
+}

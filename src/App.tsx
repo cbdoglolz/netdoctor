@@ -1,3 +1,4 @@
+import InventoryControls, {DeleteDevice} from './InventoryControls';
 import PathObservation from './PathObservation';
 import DeviceEditor, { MonitoringButton } from './DeviceEditor';
 import ServiceSettings from './ServiceSettings';
@@ -674,6 +675,7 @@ export default function App() {
               title="所有设备"
               subtitle={`${snapshot.devices.length} 台设备 · ${stale ? '当前在线数未知' : `${online} 台在线`}`}
             >
+              {live && <InventoryControls/>}
               <div className="table-toolbar">
                 <label className="search-box">
                   <Search size={17} />
@@ -737,6 +739,7 @@ export default function App() {
                             <span>
                               <strong>{d.name}</strong>
                               <small>{d.model}</small>
+                              <small>{d.annotatedAt ? `标注 ${new Date(d.annotatedAt).toLocaleDateString('zh-CN')}` : d.firstRecordedAt ? `首次记录 ${new Date(d.firstRecordedAt).toLocaleDateString('zh-CN')}` : ''}</small>
                               <BypassBadge path={d.bypassPath} />
                             </span>
                           </button>
@@ -1202,6 +1205,7 @@ function DeviceDetails({
         <div className="drawer-body">
           <div className="device-hero">
             <DeviceEditor device={d} live={live} />
+            {live && d.id!=='doctor' && d.ip!=='node-internet' && <DeleteDevice ip={d.ip}/>}
             <h2 id="device-title">{d.name}</h2>
             <p>{d.model}</p>
             <StatusBadge status={d.status} />
@@ -1216,6 +1220,9 @@ function DeviceDetails({
                 {d.mac || '尚未取得'}
                 {d.macSource && <small> · {d.macSource}</small>}
               </dd>
+              <dt>首次记录</dt><dd>{d.firstRecordedAt ? new Date(d.firstRecordedAt).toLocaleString('zh-CN'):'尚无记录（不补造历史）'}</dd>
+              <dt>最近 ARP 扫描响应</dt><dd>{d.lastScannedAt ? new Date(d.lastScannedAt).toLocaleString('zh-CN'):'尚未取得扫描响应'}</dd>
+              <dt>最近标注</dt><dd>{d.annotatedAt ? new Date(d.annotatedAt).toLocaleString('zh-CN'):'尚未记录标注时间'}</dd>
               <dt>设备类型</dt>
               <dd>{kindLabels[d.kind]}</dd>
               <dt>连接方式</dt>

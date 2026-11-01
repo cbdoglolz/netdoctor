@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 )
 
 func validateIcon(value string) error {
@@ -76,5 +77,10 @@ func deviceAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	engine.config = c
+	stamp := time.Now().Format(time.RFC3339)
+	if _, err := engine.db.Exec("INSERT INTO device_meta(ip,first_seen,last_scan,marked_at,hidden) VALUES(?,?,'',?,0) ON CONFLICT(ip) DO UPDATE SET marked_at=excluded.marked_at", d.IP, stamp, stamp); err != nil {
+		reply(w, 500, map[string]string{"error": "备注已保存，但更新时间写入失败"})
+		return
+	}
 	reply(w, 200, map[string]string{"message": "设备标注已保存，下一轮采集生效"})
 }
