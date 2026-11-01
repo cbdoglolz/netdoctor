@@ -94,13 +94,18 @@ export function useLiveSnapshot(range: Range = '24h') {
           return;
         }
         const config = (await response.json()) as { live?: boolean };
-        if (!config.live) throw new Error('static');
+        if (config.live === false) {
+          if (!disposed) setState({ checked: true, live: false, snapshot: null, error: '' });
+          return;
+        }
+        if (config.live !== true) throw new Error('采集运行模式返回无效');
         if (disposed) return;
         setState((s) => ({ ...s, checked: true, live: true }));
         await poll();
         timer = setInterval(poll, 10000);
       } catch {
-        if (!disposed) setState({ checked: true, live: false, snapshot: null, error: '' });
+        // Only an explicit static-mode response may enable demo data.
+        if (!disposed) setState({ checked: true, live: true, snapshot: null, error: '无法连接采集服务，请检查网络后刷新；未载入演示数据。' });
       }
     }
     void start();
