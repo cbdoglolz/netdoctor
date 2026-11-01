@@ -102,7 +102,9 @@ func validateConfig(c runtimeConfig) error {
 	seen := map[string]bool{}
 	parents := map[string]string{}
 	for _, d := range c.Devices {
- if len([]rune(d.Group))>40 {return errors.New("分组名称最多 40 字")}
+		if len([]rune(d.Group)) > 40 {
+			return errors.New("分组名称最多 40 字")
+		}
 		if seen[d.IP] {
 			return errors.New("设备 IP / 节点不能重复")
 		}

@@ -29,7 +29,7 @@ import (
 
 //go:embed web/*
 var web embed.FS
-var version = "0.3.5"
+var version = "0.3.6"
 var sessionPattern = regexp.MustCompile(`^[a-fA-F0-9]{32}$`)
 
 const base = "/opt/homenet-doctor"
@@ -96,6 +96,8 @@ func main() {
 		log.Printf("Path observer cleanup: %v", err)
 	}
 	go engine.run(ctx)
+	connectionsDone := make(chan struct{})
+	go func() { defer close(connectionsDone); runConnections(ctx) }()
 	presenceDone := make(chan struct{})
 	go func() { defer close(presenceDone); presence.run(ctx) }()
 	static, _ := fs.Sub(web, "web")
@@ -121,6 +123,7 @@ func main() {
 	mux.HandleFunc("/api/inventory", inventoryAPI)
 	mux.HandleFunc("/api/layout", layoutAPI)
 	mux.HandleFunc("/api/changes", changesAPI)
+	mux.HandleFunc("/api/connections", connectionsAPI)
 	mux.HandleFunc("/api/path-observation", pathObservationAPI)
 	mux.HandleFunc("/api/history", historyAPI)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -152,6 +155,7 @@ func main() {
 		<-ctx.Done()
 		paths.stop()
 		<-presenceDone
+		<-connectionsDone
 		shutdown, stop := context.WithTimeout(context.Background(), 5*time.Second)
 		defer stop()
 		server.Shutdown(shutdown)

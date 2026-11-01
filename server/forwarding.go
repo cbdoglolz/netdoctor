@@ -39,6 +39,15 @@ func forwardedClients(text string, local string) map[string]bool {
 	return result
 }
 func observeForwarding() map[string]bool {
-	out, _ := runTimeout(3*time.Second, "conntrack", "-L", "-o", "extended")
-	return forwardedClients(string(out), localIP())
+	connectionCache.RLock()
+	defer connectionCache.RUnlock()
+	result := map[string]bool{}
+	at, _ := time.Parse(time.RFC3339, connectionCache.data.ObservedAt)
+	if connectionCache.data.Availability != "available" || time.Since(at) > 45*time.Second {
+		return result
+	}
+	for _, r := range connectionCache.data.Items {
+		result[r.Source] = true
+	}
+	return result
 }

@@ -1,3 +1,4 @@
+import Connections from './Connections';
 import {compareDevices} from './device-sort';
 import InventoryControls, {DeleteDevice, ScanChanges} from './InventoryControls';
 import PathObservation from './PathObservation';
@@ -817,6 +818,7 @@ export default function App() {
                   ))}
                 </select>
               </div>
+              <Connections devices={snapshot.devices} selected={trafficDevice} live={live} onDevice={setSelected}/>
               <div className="overview-grid">
                 <Panel
                   title="设备流量排行"
@@ -1118,6 +1120,7 @@ export default function App() {
       )}
       {currentDevice && (
         <DeviceDetails
+          onConnections={()=>{setTrafficDevice(currentDevice.id);setSelected(null);navigate('traffic');}}
           live={live}
           device={currentDevice}
           alerts={snapshot.alerts.filter((a) => a.deviceIds.includes(currentDevice.id))}
@@ -1175,12 +1178,14 @@ function MetricCard({
 }
 
 function DeviceDetails({
+ onConnections,
   live,
   device: d,
   alerts,
   onClose,
   onAlert,
 }: {
+  onConnections: () => void;
   live: boolean;
   device: Device;
   alerts: Alert[];
@@ -1210,6 +1215,7 @@ function DeviceDetails({
         </header>
         <div className="drawer-body">
           <div className="device-hero">
+            {live && <button className="button small" onClick={onConnections}>查看当前可见连接</button>}
             <DeviceEditor device={d} live={live} />
             {live && d.id!=='doctor' && d.ip!=='node-internet' && <DeleteDevice ip={d.ip}/>}
             <h2 id="device-title">{d.name}</h2>
