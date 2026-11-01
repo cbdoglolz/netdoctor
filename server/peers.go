@@ -315,3 +315,60 @@ func sharedPeerNotes() map[string]peerAnnotation {
 	}
 	return notes
 }
+func decoratePeerPaths(byIP map[string]map[string]any, byID map[string]string, links []any) []any {
+	peers.RLock()
+	views := append([]peerView{}, peers.views...)
+	peers.RUnlock()
+	for _, v := range views {
+		if v.Status != "online" || v.Payload == nil {
+			continue
+		}
+		collector := ""
+		devices, _ := v.Payload.Snapshot["devices"].([]any)
+		for _, raw := range devices {
+			d, _ := raw.(map[string]any)
+			if d["id"] == "doctor" {
+				collector, _ = d["ip"].(string)
+			}
+		}
+		if byID[collector] == "" {
+			continue
+		}
+		for _, raw := range devices {
+			d, _ := raw.(map[string]any)
+			ip, _ := d["ip"].(string)
+			target := byIP[ip]
+			if target == nil || byID[ip] == "" || ip == collector {
+				continue
+			}
+			mac, _ := d["mac"].(string)
+			localMAC, _ := target["mac"].(string)
+			if mac == "" || !strings.EqualFold(mac, localMAC) {
+				continue
+			}
+			path, _ := d["bypassPath"].(map[string]any)
+			if path["state"] != "recent" {
+				continue
+			}
+			stamp, _ := path["observedAt"].(string)
+			at, err := time.Parse(time.RFC3339, stamp)
+			if err != nil || time.Since(at) > 2*time.Minute || time.Until(at) > time.Second {
+				continue
+			}
+			evidence := map[string]any{"node": v.Name, "nodeIP": collector, "observedAt": stamp}
+			existing, _ := target["peerPaths"].([]any)
+			target["peerPaths"] = append(existing, evidence)
+			out := links[:0]
+			for _, l := range links {
+				m, _ := l.(map[string]any)
+				if m["from"] == byID[ip] && m["to"] == byID[collector] && m["relation"] == "gateway" {
+					continue
+				}
+				out = append(out, l)
+			}
+			links = out
+			links = append(links, map[string]any{"id": "peer-" + v.ID + "-" + byID[ip], "from": byID[ip], "to": byID[collector], "relation": "gateway", "confidence": "confirmed", "status": "online", "availability": "available", "observedAt": stamp, "source": "远端节点 " + v.Name + " 的公网请求交付证据；不证明全部流量受控", "pathObserved": true, "pathNode": collector, "measured": false})
+		}
+	}
+	return links
+}

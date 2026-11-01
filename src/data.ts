@@ -33,6 +33,7 @@ export interface Observation<T> {
   observedAt: string;
 }
 export interface Device {
+ peerPaths?: {node:string;nodeIP:string;observedAt:string}[];
  group?: string;
   firstRecordedAt?: string;
   lastScannedAt?: string;
@@ -64,6 +65,7 @@ export interface Device {
   bypassPath?: { state: 'unknown' | 'recent' | 'historical'; label: string; detail: string; observedAt?: string; observedIP?: string };
 }
 export interface TopologyLink {
+ pathNode?: string;
   pathObserved?: boolean;
   id: string;
   from: string;

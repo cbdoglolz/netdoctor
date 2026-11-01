@@ -577,6 +577,7 @@ func (e *runtimeEngine) sample() {
 		}(), "source": link.Source, "observedAt": stamp, "availability": "available", "relation": link.Relation, "status": status, "downloadMbps": rate.RX, "uploadMbps": rate.TX, "measured": measured && link.Relation == "gateway"})
 	}
 	links, raw["pathMonitor"] = presence.decorate(byIP, byID, links, now, localIP())
+	links = decoratePeerPaths(byIP, byID, links)
 	raw["devices"] = devices
 	raw["alerts"] = e.eventHistory(c, probes, byID, e.writeError, stamp)
 	raw["links"] = links

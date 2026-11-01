@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestPeerTargetRestrictions(t *testing.T) {
@@ -62,5 +63,23 @@ func TestPeerCertificatePinAndIdentity(t *testing.T) {
 	p.ID = strings.Repeat("b", 32)
 	if _, err := fetchPeer(context.Background(), p); err == nil {
 		t.Fatal("wrong node identity accepted")
+	}
+}
+func TestPeerPathRequiresFreshMatchingIdentity(t *testing.T) {
+	peers.Lock()
+	old := peers.views
+	peers.Unlock()
+	defer func() { peers.Lock(); peers.views = old; peers.Unlock() }()
+	now := time.Now().Format(time.RFC3339)
+	payload := &peerPayload{Snapshot: map[string]any{"devices": []any{map[string]any{"id": "doctor", "ip": "192.168.1.144"}, map[string]any{"ip": "192.168.1.20", "mac": "00:11:22:33:44:55", "bypassPath": map[string]any{"state": "recent", "observedAt": now}}}}}
+	for _, status := range []string{"online", "stale", "unavailable"} {
+		peers.Lock()
+		peers.views = []peerView{{ID: "node", Name: "B", Status: status, Payload: payload}}
+		peers.Unlock()
+		devices := map[string]map[string]any{"192.168.1.20": {"mac": "00:11:22:33:44:55"}, "192.168.1.144": {}}
+		links := decoratePeerPaths(devices, map[string]string{"192.168.1.20": "client", "192.168.1.144": "routerB"}, nil)
+		if (len(links) == 1) != (status == "online") {
+			t.Fatal(status, links)
+		}
 	}
 }

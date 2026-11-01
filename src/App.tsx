@@ -748,7 +748,7 @@ export default function App() {
                               <strong>{d.name}</strong>
                               <small>{d.model}</small>
                               <small>{d.annotatedAt ? `标注 ${new Date(d.annotatedAt).toLocaleDateString('zh-CN')}` : d.firstRecordedAt ? `首次记录 ${new Date(d.firstRecordedAt).toLocaleDateString('zh-CN')}` : ''}</small>
-                              <BypassBadge path={d.bypassPath} />
+                              <BypassBadge path={d.bypassPath} />{d.peerPaths?.map(p=><span className="bypass-badge recent" key={p.nodeIP} title={`${p.node} · ${p.observedAt}`}>流量经 {p.nodeIP}（远端）</span>)}
                             </span>
                           </button>
                         </td>
