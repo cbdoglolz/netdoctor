@@ -2580,3 +2580,4 @@ dd {
 .layout-tools small {font-size:10px; flex-basis:100%;color:#8793a4;}
 .inventory-controls {padding:12px 18px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
 .inventory-controls small {flex-basis:100%;color:#8793a4;font-size:11px;}
+.topology-canvas:has(.layout-tools) .react-flow__controls { bottom: 95px; }
