@@ -26,7 +26,8 @@ import (
 
 //go:embed web/*
 var web embed.FS
-var version = "0.2.0"
+var version = "0.2.1"
+var sessionPattern = regexp.MustCompile(`^[a-fA-F0-9]{32}$`)
 
 const base = "/opt/homenet-doctor"
 const repo = "https://api.github.com/repos/cbdoglolz/netdoctor"
@@ -46,7 +47,7 @@ func reply(w http.ResponseWriter, status int, value any) {
 }
 func auth(r *http.Request) bool {
 	cookie, e := r.Cookie("homenet_session")
-	if e != nil || cookie.Value == strings.Repeat("0", 32) || !regexp.MustCompile(`^[a-fA-F0-9]{32}$`).MatchString(cookie.Value) {
+	if e != nil || cookie.Value == strings.Repeat("0", 32) || !sessionPattern.MatchString(cookie.Value) {
 		return false
 	}
 	args, _ := json.Marshal(map[string]any{"ubus_rpc_session": cookie.Value, "scope": "ubus", "object": "system", "function": "board"})
@@ -69,12 +70,15 @@ func sameOrigin(r *http.Request) bool {
 	return e == nil && origin != "" && u.Host == r.Host && (u.Scheme == "http" || u.Scheme == "https")
 }
 
-const loginPage = `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>HomeNet Doctor 登录</title><style>body{font:14px system-ui;background:#f6f8fb;color:#354866;display:grid;place-items:center;min-height:95vh}form{background:white;padding:35px;border:1px solid #e4eaf2;border-radius:14px;width:290px}input,button{box-sizing:border-box;width:100%;padding:12px;margin-top:15px;border:1px solid #dce5f1;border-radius:7px}button{background:#2976eb;color:white}p{font-size:12px;line-height:1.8;color:#8191a7}</style><form method="post" action="/login"><h2>HomeNet Doctor</h2><p>使用软路由的管理员账号登录。认证由本机 ubus 完成，密码不保存。</p><input name="username" value="root" autocomplete="username" aria-label="用户名" required><input name="password" type="password" autocomplete="current-password" aria-label="密码" required><button>登录</button><p>当前为真实采集测试版。请在可信局域网中使用。</p></form></html>`
+const loginPage = `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>HomeNet Doctor 登录</title><style>body{font:14px system-ui;background:#f6f8fb;color:#354866;display:grid;place-items:center;min-height:95vh}form{background:white;padding:35px;border:1px solid #e4eaf2;border-radius:14px;width:290px}input,button{box-sizing:border-box;width:100%;padding:12px;margin-top:15px;border:1px solid #dce5f1;border-radius:7px}button{background:#2976eb;color:white}p{font-size:12px;line-height:1.8;color:#8191a7}</style><form method="post" action="/login"><h2>HomeNet Doctor</h2><p>使用软路由的管理员账号登录。认证由本机 ubus 完成，密码不保存。</p><input name="username" value="root" autocapitalize="none" spellcheck="false" autocomplete="username" aria-label="用户名" required><input name="password" id="password" type="password" autocapitalize="none" spellcheck="false" autocomplete="current-password" aria-label="密码" required><label style="display:block;margin-top:12px"><input type="checkbox" style="width:auto;margin:0 6px 0 0" onchange="document.getElementById('password').type=this.checked?'text':'password'">显示密码</label><button>登录</button><p>当前为真实采集测试版。请在可信局域网中使用。</p></form></html>`
 
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "--version" {
 		fmt.Print(version)
 		return
+	}
+	if err := installLuCI(); err != nil {
+		log.Printf("LuCI entry installation failed: %v", err)
 	}
 	static, _ := fs.Sub(web, "web")
 	files := http.FileServer(http.FS(static))
@@ -82,35 +86,7 @@ func main() {
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		reply(w, 200, map[string]any{"version": version, "status": "ok"})
 	})
-	mux.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Cache-Control", "no-store")
-		if r.Method == "GET" {
-			io.WriteString(w, loginPage)
-			return
-		}
-		if r.Method != "POST" || !sameOrigin(r) {
-			http.Error(w, "Forbidden", 403)
-			return
-		}
-		r.Body = http.MaxBytesReader(w, r.Body, 4096)
-		r.ParseForm()
-		if r.FormValue("username") != "root" {
-			http.Error(w, "需要管理员账号", 403)
-			return
-		}
-		args, _ := json.Marshal(map[string]any{"username": "root", "password": r.FormValue("password"), "timeout": 1800})
-		var result struct {
-			Session string `json:"ubus_rpc_session"`
-		}
-		json.Unmarshal(command("ubus", "call", "session", "login", string(args)), &result)
-		if result.Session == "" {
-			time.Sleep(time.Second)
-			http.Error(w, "登录失败", 401)
-			return
-		}
-		http.SetCookie(w, &http.Cookie{Name: "homenet_session", Value: result.Session, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode, MaxAge: 1800})
-		http.Redirect(w, r, "/", 303)
-	})
+	mux.HandleFunc("/login", handleLogin)
 	mux.HandleFunc("/api/snapshot", func(w http.ResponseWriter, r *http.Request) { reply(w, 200, collect()) })
 	mux.HandleFunc("/runtime.json", func(w http.ResponseWriter, r *http.Request) { reply(w, 200, map[string]bool{"live": true}) })
 	mux.HandleFunc("/api/version", func(w http.ResponseWriter, r *http.Request) {

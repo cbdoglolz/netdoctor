@@ -4,7 +4,9 @@
 
 服务目录 /opt/homenet-doctor；二进制按 releases/版本号 保存；current 为当前版本软链接。配置与历史版本位于发布目录外，不随版本切换覆盖。启动脚本 /etc/init.d/homenet-doctor 使用 procd，监听由 UCI network.lan.ipaddr 读取的 LAN 地址 8088 端口。
 
-页面使用与路由器相同的 root 账号密码登录。HTTP 入口只适用于可信局域网；生产 HTTPS 与 LuCI 菜单集成尚未完成。不对 WAN 新增开放规则。
+页面使用与路由器相同的 root 账号密码登录。HTTP 入口只适用于可信局域网；生产 HTTPS 集成尚未完成。不对 WAN 新增开放规则。
+
+v0.2.1 起已集成 LuCI「服务 → HomeNet Doctor 网络诊断」菜单，点击后衔接已登录的 root 会话。服务启动会自动安装其专用控制器并失效菜单索引缓存，不重启 uhttpd。HTTPS 集成仍待完成。
 
 ## 安装
 

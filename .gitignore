@@ -10,3 +10,5 @@ playwright-report/
 server/web/
 server/homenet-doctor*
 !server/homenet-doctor.init
+
+.codex-remote-attachments/
