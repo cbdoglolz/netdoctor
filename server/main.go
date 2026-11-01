@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/sha256"
 	"crypto/subtle"
 	"embed"
@@ -26,7 +27,7 @@ import (
 
 //go:embed web/*
 var web embed.FS
-var version = "0.2.1"
+var version = "0.3.0"
 var sessionPattern = regexp.MustCompile(`^[a-fA-F0-9]{32}$`)
 
 const base = "/opt/homenet-doctor"
@@ -36,7 +37,9 @@ var client = &http.Client{Timeout: 90 * time.Second}
 var updateMu sync.Mutex
 
 func command(args ...string) []byte {
-	out, _ := exec.Command(args[0], args[1:]...).Output()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	out, _ := exec.CommandContext(ctx, args[0], args[1:]...).Output()
 	return out
 }
 func reply(w http.ResponseWriter, status int, value any) {
@@ -80,6 +83,12 @@ func main() {
 	if err := installLuCI(); err != nil {
 		log.Printf("LuCI entry installation failed: %v", err)
 	}
+	var err error
+	engine, err = openEngine(base + "/config")
+	if err != nil {
+		log.Fatal(err)
+	}
+	go engine.run(context.Background())
 	static, _ := fs.Sub(web, "web")
 	files := http.FileServer(http.FS(static))
 	mux := http.NewServeMux()
@@ -98,6 +107,8 @@ func main() {
 		reply(w, 200, map[string]any{"localVersion": version, "onlineVersion": strings.TrimPrefix(rel.Tag, "v"), "notes": rel.Body, "updateAvailable": newer(rel.Tag, version), "canUpdate": hasAssets(rel), "reason": "安装前验证版本及 SHA-256；失败时保留当前版本。", "releaseUrl": rel.URL})
 	})
 	mux.HandleFunc("/api/update", update)
+	mux.HandleFunc("/api/config", configAPI)
+	mux.HandleFunc("/api/history", historyAPI)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-cache")
 		files.ServeHTTP(w, r)
@@ -274,7 +285,7 @@ var previousCPU, previousIdle uint64
 func observation(value any, availability, source, stamp string) map[string]any {
 	return map[string]any{"value": value, "availability": availability, "source": source, "observedAt": stamp}
 }
-func collect() map[string]any {
+func collectRaw() map[string]any {
 	sampleMu.Lock()
 	defer sampleMu.Unlock()
 	now := time.Now()

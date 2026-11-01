@@ -1,3 +1,4 @@
+import ServiceSettings from './ServiceSettings';
 import { useLiveSnapshot } from './useLiveSnapshot';
 import packageInfo from '../package.json';
 import VersionSettings from './VersionSettings';
@@ -156,7 +157,7 @@ export default function App() {
     Record<string, { acknowledged?: boolean; mutedUntil?: number }>
   >({});
   const [clock, setClock] = useState(Date.now());
-  const liveState = useLiveSnapshot();
+  const liveState = useLiveSnapshot(range);
   const live = liveState.live;
   const snapshot = liveState.snapshot ?? demoService.getSnapshot(settings.mode, scenario, range);
   const activeAlerts = snapshot.alerts.filter((a) => !a.recovered);
@@ -341,39 +342,41 @@ export default function App() {
               <strong>{live ? '真实只读采集' : '体验演示'}</strong>
               <span>{live ? '每 10 秒刷新 · 不修改网络配置' : '切换场景，查看诊断如何变化'}</span>
             </div>
-            <div className="demo-selects">
-              <label>
-                <span className="sr-only">部署模式</span>
-                <select
-                  disabled={live}
-                  aria-label="部署模式"
-                  value={settings.mode}
-                  onChange={(e) => {
-                    saveSettings({ ...settings, mode: e.target.value as Mode });
-                    setSelected(null);
-                    setTrafficDevice('all');
-                  }}
-                >
-                  <option value="bypass">爱快 + iStoreOS 旁路由</option>
-                  <option value="gateway">iStoreOS / OpenWrt 主路由</option>
-                </select>
-              </label>
-              <label>
-                <span className="sr-only">演示场景</span>
-                <select
-                  disabled={live}
-                  aria-label="演示场景"
-                  value={scenario}
-                  onChange={(e) => setScenario(e.target.value as Scenario)}
-                >
-                  {Object.entries(scenarioLabels).map(([id, name]) => (
-                    <option key={id} value={id}>
-                      {name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
+            {!live && (
+              <div className="demo-selects">
+                <label>
+                  <span className="sr-only">部署模式</span>
+                  <select
+                    disabled={live}
+                    aria-label="部署模式"
+                    value={settings.mode}
+                    onChange={(e) => {
+                      saveSettings({ ...settings, mode: e.target.value as Mode });
+                      setSelected(null);
+                      setTrafficDevice('all');
+                    }}
+                  >
+                    <option value="bypass">爱快 + iStoreOS 旁路由</option>
+                    <option value="gateway">iStoreOS / OpenWrt 主路由</option>
+                  </select>
+                </label>
+                <label>
+                  <span className="sr-only">演示场景</span>
+                  <select
+                    disabled={live}
+                    aria-label="演示场景"
+                    value={scenario}
+                    onChange={(e) => setScenario(e.target.value as Scenario)}
+                  >
+                    {Object.entries(scenarioLabels).map(([id, name]) => (
+                      <option key={id} value={id}>
+                        {name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            )}
           </div>
 
           {page === 'overview' && (
@@ -446,7 +449,7 @@ export default function App() {
                   color="teal"
                 />
                 <MetricCard
-                  label="外部网络延迟"
+                  label={live ? '关键设备延迟' : '外部网络延迟'}
                   value={snapshot.metrics.latency}
                   unit="ms"
                   icon={<Activity size={18} />}
@@ -480,11 +483,14 @@ export default function App() {
                 <Panel
                   title="网络趋势"
                   subtitle="可见流量与连接质量"
-                  action={<RangeControl value={range} onChange={setRange} disabled={live} />}
+                  action={<RangeControl value={range} onChange={setRange} />}
                 >
                   <div className="chart-top">
                     <strong>
-                      {stale
+                      {stale ||
+                      (quality
+                        ? snapshot.metrics.latency.value
+                        : snapshot.metrics.download.value) === null
                         ? '—'
                         : `${quality ? snapshot.metrics.latency.value : snapshot.metrics.download.value} `}
                       <small>
@@ -614,7 +620,11 @@ export default function App() {
           {page === 'topology' && (
             <Panel
               title="网络连接地图"
-              subtitle="实线表示演示数据中已确认的连接，虚线表示推测；并非真实扫描结果。"
+              subtitle={
+                live
+                  ? '实线：用户确认或接口证据；虚线：待核实。网关路径与实际接线分层展示。'
+                  : '实线表示演示数据中已确认的连接，虚线表示推测；并非真实扫描结果。'
+              }
               action={
                 <select
                   aria-label="拓扑筛选"
@@ -644,7 +654,11 @@ export default function App() {
                   <i className="line dashed" />
                   推测连接
                 </span>
-                <span>独立节点：连接位置待确认</span>
+                <span>
+                  {live
+                    ? '绿色：两端可达；灰蓝：状态待确认。物理线颜色不代表端口协商。'
+                    : '独立节点：连接位置待确认'}
+                </span>
               </div>
             </Panel>
           )}
@@ -757,7 +771,7 @@ export default function App() {
                   <Info size={15} />
                   {snapshot.coverage}
                 </span>
-                <RangeControl value={range} onChange={setRange} disabled={live} />
+                <RangeControl value={range} onChange={setRange} />
               </div>
               <Panel
                 title="观测路径流量趋势"
@@ -1042,6 +1056,12 @@ export default function App() {
               onSave={saveSettings}
             />
           )}
+          {live && snapshot.historyStart && (
+            <p className="coverage-note">
+              历史自 {new Date(snapshot.historyStart).toLocaleString('zh-CN')}{' '}
+              开始，尚不足完整保留时长的部分不补造。
+            </p>
+          )}
           <footer className="page-footer">
             <span>
               <ShieldCheck size={13} />
@@ -1181,7 +1201,10 @@ function DeviceDetails({
               <dt>IP 地址</dt>
               <dd className="mono">{d.ip}</dd>
               <dt>MAC 地址</dt>
-              <dd className="mono">{d.mac}</dd>
+              <dd className="mono">
+                {d.mac || '尚未取得'}
+                {d.macSource && <small> · {d.macSource}</small>}
+              </dd>
               <dt>设备类型</dt>
               <dd>{kindLabels[d.kind]}</dd>
               <dt>连接方式</dt>
@@ -1202,6 +1225,20 @@ function DeviceDetails({
                   ? '无响应，尚不能确认离线'
                   : displayMetric(d.latency, ' ms')}
               </dd>
+              {d.loss !== undefined && (
+                <>
+                  <dt>本轮 ICMP 丢包</dt>
+                  <dd>{d.loss}%（不代表互联网丢包）</dd>
+                </>
+              )}
+              {d.downloadMbps !== undefined && (
+                <>
+                  <dt>可见路径速率</dt>
+                  <dd>
+                    ↓{d.downloadMbps.toFixed(2)} / ↑{(d.uploadMbps || 0).toFixed(2)} Mbps
+                  </dd>
+                </>
+              )}
               <dt>所选时段流量</dt>
               <dd>{displayMetric(d.traffic, ' GB')}</dd>
               <dt>CPU</dt>
@@ -1214,7 +1251,18 @@ function DeviceDetails({
             <h3>设备事件</h3>
             <ul className="device-history">
               {d.history.map((h) => (
-                <li key={h}>{h}</li>
+                <li key={h}>
+                  {h.replace(
+                    /unresponsive|unknown|online|offline/g,
+                    (s) =>
+                      ({
+                        unresponsive: '探测无响应',
+                        unknown: '状态未知',
+                        online: '在线',
+                        offline: '离线',
+                      })[s] || s,
+                  )}
+                </li>
               ))}
             </ul>
             {alerts.map((a) => (
@@ -1231,6 +1279,14 @@ function DeviceDetails({
               <strong>数据来源</strong>
               <br />
               {d.source}
+              <br />
+              {d.randomizedMac && (
+                <>
+                  本地管理 / 随机 MAC，不能据此可靠识别品牌
+                  <br />
+                </>
+              )}
+              {d.latency.source}
               <br />
               {d.traffic.source}
               <br />
@@ -1262,105 +1318,109 @@ function SettingsPage({
   return (
     <div className="settings-grid">
       <VersionSettings />
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          onSave(draft);
-        }}
-      >
-        <Panel title="监测与数据存储" subtitle="当前仅保存原型偏好，不会更改路由器配置。">
-          <div className="settings-fields">
-            <label>
-              <span>
-                <strong>部署模式</strong>
-                <small>决定拓扑结构与观测覆盖说明</small>
-              </span>
-              <select
-                aria-label="设置部署模式"
-                value={draft.mode}
-                onChange={(e) => setDraft({ ...draft, mode: e.target.value as Mode })}
-              >
-                <option value="bypass">爱快 + iStoreOS 旁路由</option>
-                <option value="gateway">iStoreOS / OpenWrt 主路由</option>
-              </select>
-            </label>
-            {(
-              [
-                {
-                  key: 'interval',
-                  title: '监测间隔',
-                  help: '原型演示参数，真实采集阶段生效',
-                  unit: '秒',
-                  min: 5,
-                  max: 300,
-                },
-                {
-                  key: 'cache',
-                  title: '内存缓存上限',
-                  help: '拟定采集缓冲区预算',
-                  unit: 'MiB',
-                  min: 16,
-                  max: 512,
-                },
-                {
-                  key: 'storage',
-                  title: '数据存储上限',
-                  help: '达到预算后按保留策略清理历史数据',
-                  unit: 'MiB',
-                  min: 128,
-                  max: 8192,
-                },
-                {
-                  key: 'retention',
-                  title: '历史保留时间',
-                  help: '原型默认值，实际开销需实机验证',
-                  unit: '天',
-                  min: 1,
-                  max: 365,
-                },
-              ] as const
-            ).map((f) => (
-              <label key={f.key}>
+      {snapshot.live ? (
+        <ServiceSettings />
+      ) : (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            onSave(draft);
+          }}
+        >
+          <Panel title="监测与数据存储" subtitle="当前仅保存原型偏好，不会更改路由器配置。">
+            <div className="settings-fields">
+              <label>
                 <span>
-                  <strong>{f.title}</strong>
-                  <small>{f.help}</small>
+                  <strong>部署模式</strong>
+                  <small>决定拓扑结构与观测覆盖说明</small>
                 </span>
-                <span className="number-input">
-                  <input
-                    aria-label={f.title}
-                    type="number"
-                    min={f.min}
-                    max={f.max}
-                    step={1}
-                    required
-                    value={Number.isNaN(draft[f.key]) ? '' : draft[f.key]}
-                    onChange={(e) =>
-                      setDraft({
-                        ...draft,
-                        [f.key]: e.target.value === '' ? NaN : Number(e.target.value),
-                      })
-                    }
-                  />
-                  <span>{f.unit}</span>
-                </span>
+                <select
+                  aria-label="设置部署模式"
+                  value={draft.mode}
+                  onChange={(e) => setDraft({ ...draft, mode: e.target.value as Mode })}
+                >
+                  <option value="bypass">爱快 + iStoreOS 旁路由</option>
+                  <option value="gateway">iStoreOS / OpenWrt 主路由</option>
+                </select>
               </label>
-            ))}
-          </div>
-          <div className="settings-actions">
-            <button type="submit" className="button primary">
-              <Check size={15} />
-              保存设置
-            </button>
-            <button
-              type="button"
-              className="button secondary"
-              onClick={() => setDraft({ ...defaults })}
-            >
-              恢复默认值
-            </button>
-          </div>
-        </Panel>
-      </form>
+              {(
+                [
+                  {
+                    key: 'interval',
+                    title: '监测间隔',
+                    help: '原型演示参数，真实采集阶段生效',
+                    unit: '秒',
+                    min: 5,
+                    max: 300,
+                  },
+                  {
+                    key: 'cache',
+                    title: '内存缓存上限',
+                    help: '拟定采集缓冲区预算',
+                    unit: 'MiB',
+                    min: 16,
+                    max: 512,
+                  },
+                  {
+                    key: 'storage',
+                    title: '数据存储上限',
+                    help: '达到预算后按保留策略清理历史数据',
+                    unit: 'MiB',
+                    min: 128,
+                    max: 8192,
+                  },
+                  {
+                    key: 'retention',
+                    title: '历史保留时间',
+                    help: '原型默认值，实际开销需实机验证',
+                    unit: '天',
+                    min: 1,
+                    max: 365,
+                  },
+                ] as const
+              ).map((f) => (
+                <label key={f.key}>
+                  <span>
+                    <strong>{f.title}</strong>
+                    <small>{f.help}</small>
+                  </span>
+                  <span className="number-input">
+                    <input
+                      aria-label={f.title}
+                      type="number"
+                      min={f.min}
+                      max={f.max}
+                      step={1}
+                      required
+                      value={Number.isNaN(draft[f.key]) ? '' : draft[f.key]}
+                      onChange={(e) =>
+                        setDraft({
+                          ...draft,
+                          [f.key]: e.target.value === '' ? NaN : Number(e.target.value),
+                        })
+                      }
+                    />
+                    <span>{f.unit}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+            <div className="settings-actions">
+              <button type="submit" className="button primary">
+                <Check size={15} />
+                保存设置
+              </button>
+              <button
+                type="button"
+                className="button secondary"
+                onClick={() => setDraft({ ...defaults })}
+              >
+                恢复默认值
+              </button>
+            </div>
+          </Panel>
+        </form>
+      )}
       <Panel title="采集能力" subtitle="能力会随部署模式与数据状态变化">
         <div className="capability-list">
           {snapshot.capabilities.map((c) => (
@@ -1381,8 +1441,9 @@ function SettingsPage({
         <div>
           <h3>为单台软路由设计</h3>
           <p>
-            原生部署版读取本机接口、内存与邻居表；演示版使用固定数据。当前未接入爱快管理、域名活动和按设备流量。监测参数暂为浏览器偏好，服务固定每次页面请求采集，界面每
-            10 秒刷新。
+            {snapshot.live
+              ? '后台独立采集本机状态、设备连通性和 nlbwmon 可见路径流量，SQLite 保存历史，设置保存在软路由。网页每 10 秒读取快照；管理接口、域名活动和全网流量覆盖仍待接入与核验。'
+              : '演示版使用固定数据，监测参数仅保存在当前浏览器。连接真实采集服务后，设备端负责持续采集与历史保存。'}
           </p>
         </div>
         <Download size={20} />

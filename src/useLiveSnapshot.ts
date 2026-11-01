@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import type { Snapshot } from './data';
-export function useLiveSnapshot() {
+import type { Snapshot, Range } from './data';
+export function useLiveSnapshot(range: Range = '24h') {
   const [state, setState] = useState<{
     checked: boolean;
     live: boolean;
@@ -18,7 +18,29 @@ export function useLiveSnapshot() {
           signal: AbortSignal.timeout(8000),
         });
         if (!response.ok) throw new Error('采集服务不可用或登录已过期，请重新登录');
-        const snapshot = (await response.json()) as Snapshot;
+        const snapshot = (await response.json()) as Snapshot & { error?: string };
+        if (snapshot.error) throw new Error(snapshot.error);
+        if (!Array.isArray(snapshot.devices) || !Array.isArray(snapshot.samples))
+          throw new Error('无效采集数据');
+        const hr = await fetch(`/api/history?range=${range}`, {
+          cache: 'no-store',
+          signal: AbortSignal.timeout(8000),
+        });
+        if (hr.ok) {
+          const history = await hr.json();
+          snapshot.samples = history.samples;
+          snapshot.historyStart = history.historyStart;
+          for (const d of snapshot.devices) {
+            const total = history.usage[d.mac.toLowerCase()] ?? history.usage[d.ip];
+            if (total !== undefined)
+              d.traffic = {
+                value: Number(total.toFixed(6)),
+                availability: 'available',
+                source: 'nlbwmon · 当前可见路径累计 GB',
+                observedAt: snapshot.observedAt,
+              };
+          }
+        }
         if (!Array.isArray(snapshot.devices) || !Array.isArray(snapshot.samples))
           throw new Error('无效采集数据');
         if (!disposed) setState({ checked: true, live: true, snapshot, error: '' });
@@ -61,6 +83,16 @@ export function useLiveSnapshot() {
           signal: controller.signal,
           cache: 'no-store',
         });
+        if (response.redirected || response.status === 401) {
+          if (!disposed)
+            setState({
+              checked: true,
+              live: true,
+              snapshot: null,
+              error: '登录已过期，请重新登录',
+            });
+          return;
+        }
         const config = (await response.json()) as { live?: boolean };
         if (!config.live) throw new Error('static');
         if (disposed) return;
@@ -77,6 +109,6 @@ export function useLiveSnapshot() {
       controller.abort();
       clearInterval(timer);
     };
-  }, []);
+  }, [range]);
   return state;
 }

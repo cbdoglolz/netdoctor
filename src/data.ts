@@ -1,7 +1,22 @@
 export type Mode = 'bypass' | 'gateway';
 export type Scenario = 'normal' | 'dns' | 'loss' | 'device' | 'congestion' | 'stale';
 export type Availability = 'available' | 'invisible' | 'unsupported' | 'denied' | 'stale';
-export type DeviceKind = 'gateway' | 'switch' | 'ap' | 'server' | 'computer' | 'phone' | 'iot';
+export type DeviceKind =
+  | 'gateway'
+  | 'switch'
+  | 'ap'
+  | 'server'
+  | 'computer'
+  | 'phone'
+  | 'iot'
+  | 'tablet'
+  | 'tv'
+  | 'camera'
+  | 'printer'
+  | 'speaker'
+  | 'nas'
+  | 'hypervisor'
+  | 'vm';
 export type Status = 'online' | 'unresponsive' | 'offline' | 'unknown';
 export type Range = '24h' | '7d';
 export interface Observation<T> {
@@ -26,12 +41,22 @@ export interface Device {
   observedAt: string;
   source: string;
   history: string[];
+  loss?: number;
+  downloadMbps?: number;
+  uploadMbps?: number;
+  randomizedMac?: boolean;
+  macSource?: string;
 }
 export interface TopologyLink {
   id: string;
   from: string;
   to: string;
   confidence: 'confirmed' | 'inferred';
+  relation?: 'physical' | 'virtual' | 'gateway' | 'wireless';
+  status?: string;
+  measured?: boolean;
+  downloadMbps?: number;
+  uploadMbps?: number;
   source: string;
   observedAt: string;
   availability: Availability;
@@ -74,6 +99,9 @@ export interface Sample {
 }
 export interface Snapshot {
   live?: boolean;
+  historyStart?: string;
+  storageError?: string;
+  integrations?: { name: string; available: boolean; reason?: string }[];
   mode: Mode;
   scenario: Scenario;
   devices: Device[];
@@ -125,6 +153,14 @@ export const kindLabels: Record<DeviceKind, string> = {
   computer: '电脑',
   phone: '手机',
   iot: '智能设备',
+  tablet: '平板',
+  tv: '电视',
+  camera: '摄像头',
+  printer: '打印机',
+  speaker: '音箱',
+  nas: 'NAS',
+  hypervisor: '虚拟化宿主机',
+  vm: '虚拟机',
 };
 export const statusLabels: Record<Status, string> = {
   online: '在线',
