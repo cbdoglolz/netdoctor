@@ -487,6 +487,37 @@ func (o *pathObserver) stop() {
 	}
 }
 
+// Caller holds mu; use fresh kernel totals at the phase boundary, not the last poll.
+func (o *pathObserver) markPhaseLocked(name string, counts map[string]uint64) {
+	for ip, e := range o.acc.Clients {
+		if n := counts["out:"+ip]; n >= o.baseline["out:"+ip] {
+			e.ForwardPackets = n - o.baseline["out:"+ip]
+		}
+		if n := counts["in:"+ip]; n >= o.baseline["in:"+ip] {
+			e.ReplyPackets = n - o.baseline["in:"+ip]
+		}
+		o.acc.Clients[ip] = e
+	}
+	o.snapshotLocked()
+	o.report.Phases = append(o.report.Phases, pathPhase{o.report.Phase, o.phaseAt, o.report.Devices})
+	o.acc.Phase = name
+	o.report.Phase = name
+	o.phaseAt = time.Now().Format(time.RFC3339)
+	o.acc.Flows = map[pathTuple]*pathFlow{}
+	for ip, e := range o.acc.Clients {
+		o.baseline["out:"+ip] = counts["out:"+ip]
+		o.baseline["in:"+ip] = counts["in:"+ip]
+		e.Received = 0
+		e.ForwardPackets = 0
+		e.ReplyPackets = 0
+		e.LastSeen = ""
+		e.Phase = name
+		e.Offloaded = false
+		o.acc.Clients[ip] = e
+	}
+	o.snapshotLocked()
+}
+
 func pathObservationAPI(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "POST":
@@ -513,24 +544,12 @@ func pathObservationAPI(w http.ResponseWriter, r *http.Request) {
 				reply(w, 409, map[string]string{"error": "一个任务最多 10 个阶段"})
 				return
 			}
-			paths.snapshotLocked()
-			paths.report.Phases = append(paths.report.Phases, pathPhase{paths.report.Phase, paths.phaseAt, paths.report.Devices})
-			paths.acc.Phase = q.Phase
-			paths.report.Phase = q.Phase
-			paths.phaseAt = time.Now().Format(time.RFC3339)
-			paths.acc.Flows = map[pathTuple]*pathFlow{}
-			for ip, e := range paths.acc.Clients {
-				paths.baseline["out:"+ip] += e.ForwardPackets
-				paths.baseline["in:"+ip] += e.ReplyPackets
-				e.Received = 0
-				e.ForwardPackets = 0
-				e.ReplyPackets = 0
-				e.LastSeen = ""
-				e.Phase = q.Phase
-				e.Offloaded = false
-				paths.acc.Clients[ip] = e
+			raw, err := runTimeout(3*time.Second, "nft", "-j", "list", "table", "inet", pathTable)
+			if err != nil {
+				reply(w, 503, map[string]string{"error": "无法读取阶段切换计数，尚未切换测试阶段"})
+				return
 			}
-			paths.snapshotLocked()
+			paths.markPhaseLocked(q.Phase, parsePathCounters(raw))
 			reply(w, 200, map[string]string{"message": "已标记用户声明的 IPv4 网关阶段；请建立新的公网连接，程序不会修改手机网关"})
 			return
 		}

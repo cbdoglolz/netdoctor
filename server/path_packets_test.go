@@ -144,17 +144,18 @@ func TestGatewayPhaseCannotCarryOldPathProof(t *testing.T) {
 	a.Flows[pathTuple{"192.168.1.10", "1.1.1.1", 5000, 443, 6}] = &pathFlow{Tuple: pathTuple{"192.168.1.10", "1.1.1.1", 5000, 443, 6}, Received: true, Outgoing: true, ReturnWire: true, Delivered: true}
 	paths = &pathObserver{report: &pathReport{State: "running", Phase: "gateway6", Warnings: []string{}, Phases: []pathPhase{}}, acc: a, baseline: map[string]uint64{}, phaseAt: "test"}
 	w := httptest.NewRecorder()
-	pathObservationAPI(w, httptest.NewRequest("POST", "/api/path-observation", strings.NewReader(`{"phase":"gateway3"}`)))
-	if w.Code != 200 {
-		t.Fatal(w.Code, w.Body.String())
+	pathObservationAPI(w, httptest.NewRequest("POST", "/api/path-observation", strings.NewReader(`{"phase":"invalid"}`)))
+	if w.Code != 400 {
+		t.Fatal("invalid phase accepted")
 	}
+	paths.markPhaseLocked("gateway3", map[string]uint64{"out:192.168.1.10": 12, "in:192.168.1.10": 11})
 	if len(paths.report.Phases) != 1 || paths.report.Phases[0].Devices[0].Bidirectional != 1 {
 		t.Fatal("previous phase evidence missing")
 	}
 	if paths.report.Devices[0].Received != 0 || paths.report.Devices[0].Status != "unknown" || len(paths.acc.Flows) != 0 {
 		t.Fatal("old connection proof leaked into .3 phase")
 	}
-	if paths.baseline["out:192.168.1.10"] != 10 || paths.baseline["in:192.168.1.10"] != 9 {
+	if paths.baseline["out:192.168.1.10"] != 12 || paths.baseline["in:192.168.1.10"] != 11 {
 		t.Fatal("kernel counter baseline carried over")
 	}
 }
