@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import {
   ChartLegend,
+  BypassBadge,
   DeviceBadge,
   DeviceIcon,
   StatusBadge,
@@ -208,7 +209,7 @@ export default function App() {
     (d) =>
       `${d.name} ${d.ip} ${d.model}`.toLowerCase().includes(search.toLowerCase()) &&
       (kind === 'all' || d.kind === kind) &&
-      (status === 'all' || (status === 'issue' ? d.status !== 'online' : d.status === status)),
+      (status === 'all' || (status === 'bypass' ? d.bypassPath?.state === 'recent' : status === 'bypass-history' ? d.bypassPath?.state === 'historical' : status === 'issue' ? d.status !== 'online' : d.status === status)),
   );
   const ranked = snapshot.devices
     .filter(
@@ -644,7 +645,7 @@ export default function App() {
               <div className="coverage-note inset">
                 <Info size={15} />
                 <span>
-                  {settings.mode === 'bypass'
+                  {live && snapshot.pathMonitor ? `${snapshot.pathMonitor.detail}。蓝色箭头：近期公网请求交给本机；手动网关标注单独保留。` : settings.mode === 'bypass'
                     ? 'iStoreOS 连接在核心交换机旁路位置；其他设备不一定经过它上网。'
                     : 'iStoreOS 承担主路由角色，未连接爱快管理数据。'}
                 </span>
@@ -661,7 +662,7 @@ export default function App() {
                 </span>
                 <span>
                   {live
-                    ? '绿色：两端可达；灰蓝：状态待确认。物理线颜色不代表端口协商。'
+                    ? '蓝色箭头：已观察到流量交付；绿色：两端可达；灰蓝：状态待确认。'
                     : '独立节点：连接位置待确认'}
                 </span>
               </div>
@@ -708,9 +709,12 @@ export default function App() {
                     <option value="unresponsive">探测无响应</option>
                     <option value="offline">已确认离线</option>
                     <option value="unknown">状态未知</option>
+                    {live && <option value="bypass">近期流量经旁路由</option>}
+                    {live && <option value="bypass-history">曾观察到经旁路由</option>}
                   </select>
                 </div>
               </div>
+              {live && snapshot.pathMonitor && <div className="coverage-note inset"><Info size={15}/><span>{snapshot.pathMonitor.detail}；近期 = 最近 2 分钟。历史标记保留最多 24 小时；未观察到不等于未经过。</span></div>}
               <div className="table-wrap">
                 <table>
                   <thead>
@@ -733,6 +737,7 @@ export default function App() {
                             <span>
                               <strong>{d.name}</strong>
                               <small>{d.model}</small>
+                              <BypassBadge path={d.bypassPath} />
                             </span>
                           </button>
                         </td>
@@ -740,7 +745,7 @@ export default function App() {
                           <StatusBadge status={d.status} />
                         </td>
                         <td className="mono">{d.ip}</td>
-                        <td>{d.connection}</td>
+                        <td>{d.connection}<small className="path-last-seen">{d.bypassPath?.observedAt ? `流量路径观测：${dateText(d.bypassPath.observedAt)}` : ''}</small></td>
                         <td>
                           {d.monitorDisabled
                             ? '监测已关闭'
@@ -1215,6 +1220,7 @@ function DeviceDetails({
               <dd>{kindLabels[d.kind]}</dd>
               <dt>连接方式</dt>
               <dd>{d.connection}</dd>
+              {d.bypassPath && <><dt>旁路由流量路径</dt><dd><BypassBadge path={d.bypassPath}/><p>{d.bypassPath.detail}</p>{d.bypassPath.observedAt && <small>最近流量观测：{dateText(d.bypassPath.observedAt)} · {d.bypassPath.observedIP}</small>}</dd></>}
               {d.connectionEvidence && (
                 <>
                   <dt>连接证据</dt>

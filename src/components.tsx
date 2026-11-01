@@ -42,6 +42,7 @@ import {
   Controls,
   Handle,
   Position,
+  MarkerType,
   ReactFlow,
   useReactFlow,
   useNodesInitialized,
@@ -220,6 +221,7 @@ export function ChartLegend() {
   );
 }
 type NetworkNode = Node<{
+  bypassPath?: Device['bypassPath'];
   label: string;
   subtitle: string;
   kind: DeviceKind | 'internet' | 'unknown';
@@ -245,6 +247,7 @@ function TopologyNode({ data }: NodeProps<NetworkNode>) {
       }}
     >
       <Handle type="target" position={Position.Top} />
+      <Handle type="source" id="upstream" position={Position.Top} />
       <div className="node-symbol">
         {data.customIcon ? (
           <img className="custom-device-icon" src={data.customIcon} alt="自定义设备图标" />
@@ -255,9 +258,16 @@ function TopologyNode({ data }: NodeProps<NetworkNode>) {
       </div>
       <strong>{data.label}</strong>
       <small>{data.subtitle}</small>
+      {data.bypassPath && data.bypassPath.state !== 'unknown' && <BypassBadge path={data.bypassPath} />}
       <Handle type="source" position={Position.Bottom} />
+      <Handle type="target" id="downstream" position={Position.Bottom} />
     </div>
   );
+}
+export function BypassBadge({path}: {path: Device['bypassPath']}) {
+  if (!path) return null;
+  const note = `${path.detail}${path.observedAt ? `；最近观测 ${new Date(path.observedAt).toLocaleString('zh-CN')}` : ''}${path.observedIP ? `；观测地址 ${path.observedIP}` : ''}`;
+  return <span className={`bypass-badge ${path.state}`} title={note} aria-label={`${path.label}。${note}`}>{path.label}</span>;
 }
 const nodeTypes = { network: TopologyNode };
 function FlowEdge(props: EdgeProps) {
@@ -270,6 +280,7 @@ function FlowEdge(props: EdgeProps) {
         id={props.id}
         path={path}
         style={props.style}
+        markerEnd={props.markerEnd}
         label={props.label}
         labelX={x}
         labelY={y}
@@ -399,6 +410,7 @@ export function Topology({
           kind: d.ip === 'node-internet' ? ('internet' as const) : d.icon || d.kind,
           status: d.status,
           customIcon: d.customIcon,
+          bypassPath: d.bypassPath,
           compact,
           onOpen: () => onDevice(d.id),
         },
@@ -454,13 +466,16 @@ export function Topology({
       .filter((l) => ids.has(l.from) && ids.has(l.to))
       .map((l) => ({
         id: l.id,
-        source: l.relation === 'gateway' ? l.to : l.from,
-        target: l.relation === 'gateway' ? l.from : l.to,
+        source: l.pathObserved ? l.from : l.relation === 'gateway' ? l.to : l.from,
+        target: l.pathObserved ? l.to : l.relation === 'gateway' ? l.from : l.to,
+        sourceHandle: l.pathObserved ? 'upstream' : undefined,
+        targetHandle: l.pathObserved ? 'downstream' : undefined,
+        markerEnd: l.pathObserved ? { type: MarkerType.ArrowClosed, color: '#3182f6' } : undefined,
         type: 'flow',
         data: { measured: l.measured, downloadMbps: l.downloadMbps, uploadMbps: l.uploadMbps },
         style: {
           stroke:
-            l.status === 'online'
+            l.pathObserved ? '#3182f6' : l.status === 'online'
               ? '#32ad88'
               : l.status === 'unresponsive'
                 ? '#dea14a'
@@ -473,8 +488,8 @@ export function Topology({
           animationDuration: `${Math.max(0.3, 3 - Math.log10(1 + (l.downloadMbps || 0) + (l.uploadMbps || 0)))}s`,
           strokeDasharray: l.confidence === 'inferred' ? '6 5' : undefined,
         },
-        label: snapshot.live
-          ? `${l.relation === 'gateway' ? '网关' : l.relation === 'virtual' ? '虚拟连接' : l.relation === 'wireless' ? '无线关联' : '物理接线'}${l.confidence === 'inferred' ? ' · 待核实' : ''}${l.measured ? ` ↓${(l.downloadMbps || 0).toFixed(2)} ↑${(l.uploadMbps || 0).toFixed(2)} Mbps` : ''}`
+        label: l.pathObserved ? '流量 → 旁路由' : snapshot.live
+          ? `${l.relation === 'gateway' ? '手动网关' : l.relation === 'virtual' ? '虚拟连接' : l.relation === 'wireless' ? '无线关联' : '物理接线'}${l.confidence === 'inferred' ? ' · 待核实' : ''}${l.measured ? ` ↓${(l.downloadMbps || 0).toFixed(2)} ↑${(l.uploadMbps || 0).toFixed(2)} Mbps` : ''}`
           : !compact && l.confidence === 'inferred'
             ? '推测'
             : undefined,

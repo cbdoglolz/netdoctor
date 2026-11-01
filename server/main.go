@@ -29,7 +29,7 @@ import (
 
 //go:embed web/*
 var web embed.FS
-var version = "0.3.2"
+var version = "0.3.3"
 var sessionPattern = regexp.MustCompile(`^[a-fA-F0-9]{32}$`)
 
 const base = "/opt/homenet-doctor"
@@ -96,6 +96,8 @@ func main() {
 		log.Printf("Path observer cleanup: %v", err)
 	}
 	go engine.run(ctx)
+	presenceDone := make(chan struct{})
+	go func() { defer close(presenceDone); presence.run(ctx) }()
 	static, _ := fs.Sub(web, "web")
 	files := http.FileServer(http.FS(static))
 	mux := http.NewServeMux()
@@ -146,6 +148,7 @@ func main() {
 	go func() {
 		<-ctx.Done()
 		paths.stop()
+		<-presenceDone
 		shutdown, stop := context.WithTimeout(context.Background(), 5*time.Second)
 		defer stop()
 		server.Shutdown(shutdown)

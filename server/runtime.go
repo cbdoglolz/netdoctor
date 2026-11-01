@@ -156,7 +156,7 @@ func openEngine(dir string) (*runtimeEngine, error) {
 		return nil, e
 	}
 	db.SetMaxOpenConns(1)
-	_, e = db.Exec(`PRAGMA journal_mode=WAL; PRAGMA busy_timeout=3000; CREATE TABLE IF NOT EXISTS path_reports(id TEXT PRIMARY KEY,created INTEGER,payload TEXT); CREATE TABLE IF NOT EXISTS samples(ts INTEGER PRIMARY KEY,payload TEXT NOT NULL); CREATE TABLE IF NOT EXISTS usage(ts INTEGER,identity TEXT,rx REAL,tx REAL,PRIMARY KEY(ts,identity)); CREATE TABLE IF NOT EXISTS identities(mac TEXT PRIMARY KEY,ip TEXT,name TEXT,kind TEXT,model TEXT); CREATE INDEX IF NOT EXISTS usage_time ON usage(ts); CREATE TABLE IF NOT EXISTS accounting(ip TEXT PRIMARY KEY,rx REAL,tx REAL,ts INTEGER); CREATE TABLE IF NOT EXISTS events(ts INTEGER,identity TEXT,status TEXT); CREATE INDEX IF NOT EXISTS event_identity ON events(identity,ts);`)
+	_, e = db.Exec(`PRAGMA journal_mode=WAL; PRAGMA busy_timeout=3000; CREATE TABLE IF NOT EXISTS path_presence(id INTEGER PRIMARY KEY,payload TEXT); CREATE TABLE IF NOT EXISTS path_reports(id TEXT PRIMARY KEY,created INTEGER,payload TEXT); CREATE TABLE IF NOT EXISTS samples(ts INTEGER PRIMARY KEY,payload TEXT NOT NULL); CREATE TABLE IF NOT EXISTS usage(ts INTEGER,identity TEXT,rx REAL,tx REAL,PRIMARY KEY(ts,identity)); CREATE TABLE IF NOT EXISTS identities(mac TEXT PRIMARY KEY,ip TEXT,name TEXT,kind TEXT,model TEXT); CREATE INDEX IF NOT EXISTS usage_time ON usage(ts); CREATE TABLE IF NOT EXISTS accounting(ip TEXT PRIMARY KEY,rx REAL,tx REAL,ts INTEGER); CREATE TABLE IF NOT EXISTS events(ts INTEGER,identity TEXT,status TEXT); CREATE INDEX IF NOT EXISTS event_identity ON events(identity,ts);`)
 	if e != nil {
 		db.Close()
 		return nil, e
@@ -532,6 +532,7 @@ func (e *runtimeEngine) sample() {
 			return "confirmed"
 		}(), "source": link.Source, "observedAt": stamp, "availability": "available", "relation": link.Relation, "status": status, "downloadMbps": rate.RX, "uploadMbps": rate.TX, "measured": measured && link.Relation == "gateway"})
 	}
+	links, raw["pathMonitor"] = presence.decorate(byIP, byID, links, now, localIP())
 	raw["devices"] = devices
 	raw["alerts"] = diagnosticAlerts(c, probes, byID, e.writeError, stamp)
 	raw["links"] = links

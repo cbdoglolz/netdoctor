@@ -57,8 +57,10 @@ export interface Device {
   customIcon?: string;
   monitorDisabled?: boolean;
   connectionEvidence?: string;
+  bypassPath?: { state: 'unknown' | 'recent' | 'historical'; label: string; detail: string; observedAt?: string; observedIP?: string };
 }
 export interface TopologyLink {
+  pathObserved?: boolean;
   id: string;
   from: string;
   to: string;
@@ -109,6 +111,7 @@ export interface Sample {
   loss: number | null;
 }
 export interface Snapshot {
+  pathMonitor?: { running: boolean; detail: string; source: string };
   live?: boolean;
   historyStart?: string;
   storageError?: string;

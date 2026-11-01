@@ -2570,3 +2570,9 @@ dd {
   background: #f4f8fe;
   border-radius: 8px;
 }
+.bypass-badge { display: inline-block; width: fit-content; padding: 3px 7px; border-radius: 6px; font-size: 10px; line-height: 1.35; font-weight: 500; background: #eef2f6; color: #7d899a; white-space: nowrap; }
+.bypass-badge.recent { background: #e8f2ff; color: #2472d8; }
+.bypass-badge.historical { background: #f1f3f6; color: #7d899a; }
+.device-name .bypass-badge { margin-top: 5px; }
+.topology-node .bypass-badge { margin: 5px auto 0; font-size: 9px; }
+.path-last-seen { display: block; margin-top: 5px; color: #8895a6; font-size: 10px; }
