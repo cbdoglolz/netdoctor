@@ -406,6 +406,7 @@ func (e *runtimeEngine) sample() {
 			}
 		}
 	}
+	remoteNotes := sharedPeerNotes()
 	forwarding := observeForwarding()
 	macCounts := map[string]int{}
 	for _, d := range byIP {
@@ -482,10 +483,21 @@ func (e *runtimeEngine) sample() {
 			d["downloadMbps"] = rate.RX
 			d["uploadMbps"] = rate.TX
 		}
+		if cfg.Name == "" {
+			if n, ok := remoteNotes[ip]; ok {
+				d["name"], d["kind"], d["model"], d["group"], d["source"] = n.Name, n.Kind, n.Model, n.Group, "联动节点共享标注（本机手动优先）"
+				d["icon"], d["customIcon"] = n.Icon, n.CustomIcon
+			}
+		}
 		d["identitySource"] = d["source"]
 		d["group"] = cfg.Group
 		d["icon"] = cfg.Icon
 		d["customIcon"] = cfg.CustomIcon
+		if cfg.Name == "" {
+			if n, ok := remoteNotes[ip]; ok {
+				d["group"], d["icon"], d["customIcon"] = n.Group, n.Icon, n.CustomIcon
+			}
+		}
 		d["monitorDisabled"] = cfg.MonitorDisabled
 		if cfg.MonitorDisabled {
 			d["latency"] = observation(nil, "unsupported", "主动监测已关闭", stamp)

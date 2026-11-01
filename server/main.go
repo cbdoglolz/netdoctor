@@ -29,7 +29,7 @@ import (
 
 //go:embed web/*
 var web embed.FS
-var version = "0.3.6"
+var version = "0.3.7"
 var sessionPattern = regexp.MustCompile(`^[a-fA-F0-9]{32}$`)
 
 const base = "/opt/homenet-doctor"
@@ -95,6 +95,13 @@ func main() {
 	if err := cleanupPathRules(); err != nil {
 		log.Printf("Path observer cleanup: %v", err)
 	}
+	peersDone := make(chan struct{})
+	if err := initPeers(engine.dir); err != nil {
+		log.Printf("Peer configuration unavailable: %v", err)
+		close(peersDone)
+	} else {
+		go func() { defer close(peersDone); runPeers(ctx) }()
+	}
 	go engine.run(ctx)
 	connectionsDone := make(chan struct{})
 	go func() { defer close(connectionsDone); runConnections(ctx) }()
@@ -124,6 +131,7 @@ func main() {
 	mux.HandleFunc("/api/layout", layoutAPI)
 	mux.HandleFunc("/api/changes", changesAPI)
 	mux.HandleFunc("/api/connections", connectionsAPI)
+	mux.HandleFunc("/api/peers", peersAPI)
 	mux.HandleFunc("/api/path-observation", pathObservationAPI)
 	mux.HandleFunc("/api/history", historyAPI)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -156,6 +164,7 @@ func main() {
 		paths.stop()
 		<-presenceDone
 		<-connectionsDone
+		<-peersDone
 		shutdown, stop := context.WithTimeout(context.Background(), 5*time.Second)
 		defer stop()
 		server.Shutdown(shutdown)

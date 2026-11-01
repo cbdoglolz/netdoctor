@@ -1,3 +1,4 @@
+import Peers from './Peers';
 import Connections from './Connections';
 import {compareDevices} from './device-sort';
 import InventoryControls, {DeleteDevice, ScanChanges} from './InventoryControls';
@@ -68,6 +69,7 @@ const pages = [
   { id: 'traffic', title: '流量与访问', icon: Activity },
   { id: 'alerts', title: '告警与诊断', icon: Bell },
   { id: 'path', title: '路径验证', icon: Network },
+  { id: 'peers', title: '节点联动', icon: Network },
   { id: 'settings', title: '设置', icon: Settings2 },
 ] as const;
 type Page = (typeof pages)[number]['id'];
@@ -1066,6 +1068,7 @@ export default function App() {
             </>
           )}
 
+          {page === 'peers' && (live ? <Peers/> : <p>节点联动仅在真实采集服务中提供。</p>)}
           {page === 'path' && <PathObservation live={live} />}
           {page === 'settings' && (
             <SettingsPage
