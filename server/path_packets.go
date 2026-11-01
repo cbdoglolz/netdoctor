@@ -297,7 +297,7 @@ func (a *pathAccumulator) packet(p pathPacket) {
 	if a.LocalMAC[p.SrcMAC] && !a.LocalMAC[p.DstMAC] && publicDestination(t.Dst) {
 		f.Outgoing = true
 	}
-	if a.LocalMAC[p.DstMAC] && net.ParseIP(t.Src).IsGlobalUnicast() {
+	if a.LocalMAC[p.DstMAC] && publicDestination(t.Src) {
 		f.ReturnWire = true
 	}
 	if a.LocalMAC[p.SrcMAC] && t == f.Tuple.reverse() && p.DstMAC == a.Clients[f.Tuple.Src].MAC {

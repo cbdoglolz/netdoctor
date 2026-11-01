@@ -24,6 +24,9 @@ func TestPathRequiresReceiptEgressAndBothReturnStages(t *testing.T) {
 	}
 	p := pathPacket{orig, "00:11:22:33:44:10", "00:11:22:33:44:66", time.Now()}
 	a.packet(p)
+	if a.Flows[orig].ReturnWire {
+		t.Fatal("private client request counted as public return arrival")
+	}
 	if a.evidence()[0].Status != "received" {
 		t.Fatal("receipt not detected")
 	}
