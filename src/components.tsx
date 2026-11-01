@@ -551,7 +551,7 @@ export function Topology({
       <ReactFlow
         key={`${snapshot.mode}-${filter}-${compact}-${layer}-${showUnlinked}-${Math.round(size.width)}-${Math.round(size.height)}-${nodes.map(n=>n.id).sort().join(",")}`}
         nodes={nodes.map(n=>({...n,position:positions[n.id]||n.position}))}
-        onNodesChange={(changes:NodeChange[])=>{if(editing)setPositions(p=>{const next={...p};for(const c of changes)if(c.type==='position'&&c.position)next[c.id]=c.position;return next;});}}
+        onNodesChange={(changes:NodeChange[])=>{const dragged=changes.filter(c=>c.type==='position' && c.dragging!==undefined && c.position);if(editing && dragged.length)setPositions(p=>{const next={...p};for(const c of dragged)if(c.type==='position'&&c.position)next[c.id]=c.position;return next;});}}
         edges={edges}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}

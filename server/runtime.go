@@ -244,7 +244,7 @@ func (e *runtimeEngine) sample() {
 	defer func() {
 		if force {
 			scanBusy.Store(false)
-			scanStatus.Store("扫描完成，返回 " + strconv.Itoa(len(e.discovered)) + " 台 ARP 响应；服务名称已刷新，手动备注保留。错误：" + scanText(&scanLastError))
+			scanStatus.Store("扫描完成，返回 " + strconv.Itoa(len(e.discovered)) + " 台 ARP 响应；手动备注保留")
 		}
 	}()
 	raw := collectRaw()
