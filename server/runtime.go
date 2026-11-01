@@ -376,6 +376,12 @@ func (e *runtimeEngine) sample() {
 		}
 	}
 	forwarding := observeForwarding()
+	macCounts := map[string]int{}
+	for _, d := range byIP {
+		if mac, _ := d["mac"].(string); mac != "" {
+			macCounts[strings.ToLower(mac)]++
+		}
+	}
 	byID := map[string]string{}
 	for ip, d := range byIP {
 		cfg := settings[ip]
@@ -383,7 +389,7 @@ func (e *runtimeEngine) sample() {
 
 		id := ip
 		if mac != "" {
-			id = "mac-" + strings.ReplaceAll(strings.ToLower(mac), ":", "")
+			id = addressIdentity(ip, mac, macCounts[strings.ToLower(mac)])
 		}
 		if ip == localIP() {
 			id = "doctor"
@@ -405,6 +411,9 @@ func (e *runtimeEngine) sample() {
 			var savedName, savedKind, savedModel string
 			if mac != "" && e.db.QueryRow("SELECT name,kind,model FROM identities WHERE mac=?", mac).Scan(&savedName, &savedKind, &savedModel) == nil {
 				d["name"] = savedName
+				if macCounts[strings.ToLower(mac)] > 1 {
+					d["name"] = savedName + " · " + ip
+				}
 				d["kind"] = savedKind
 				d["model"] = savedModel
 				d["source"] = "按 MAC 恢复的用户标注"
@@ -817,4 +826,12 @@ func restoreIdentities(db *sql.DB, devices map[string]map[string]any) {
 			d["macSource"] = "历史标注中的 MAC，当前邻居记录未确认"
 		}
 	}
+}
+
+func addressIdentity(ip, mac string, count int) string {
+	id := "mac-" + strings.ReplaceAll(strings.ToLower(mac), ":", "")
+	if count > 1 {
+		id += "-" + strings.NewReplacer(".", "-", ":", "-").Replace(ip)
+	}
+	return id
 }

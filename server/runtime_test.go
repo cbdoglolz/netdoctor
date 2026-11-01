@@ -128,7 +128,9 @@ func TestAccountingBaselineSurvivesRestart(t *testing.T) {
 }
 
 func TestDiscoverySources(t *testing.T) {
-	if decodeAvahi(`\229\176\143\231\136\177`) != "小爱" {t.Fatal("mDNS UTF-8 byte escapes were not decoded")}
+	if decodeAvahi(`\229\176\143\231\136\177`) != "小爱" {
+		t.Fatal("mDNS UTF-8 byte escapes were not decoded")
+	}
 	arp := parseARP("192.0.2.1\t00:11:22:33:44:55\tVendor\nnot-an-ip 00:11:22:33:44:55\n192.0.2.2 invalid")
 	if len(arp) != 1 {
 		t.Fatal(arp)
@@ -175,5 +177,13 @@ func TestAbsentNeighborRetainsOnlyUnambiguousIdentity(t *testing.T) {
 	restoreIdentities(e.db, d)
 	if d["192.0.2.1"]["mac"] != "" {
 		t.Fatal("ambiguous reused address guessed")
+	}
+}
+
+func TestMultipleAddressesDoNotCollapseTopologyNodes(t *testing.T) {
+	a := addressIdentity("192.0.2.1", "00:11:22:33:44:55", 2)
+	b := addressIdentity("192.0.2.2", "00:11:22:33:44:55", 2)
+	if a == b {
+		t.Fatal("same MAC addresses collapse to one React Flow node")
 	}
 }
