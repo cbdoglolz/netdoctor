@@ -218,7 +218,7 @@ func (m *pathPresence) decorate(byIP map[string]map[string]any, byID map[string]
 			continue
 		}
 		mac, _ := d["mac"].(string)
-		p := map[string]any{"state": "unknown", "label": "尚未观察到经旁路由", "source": "后台包头观察", "detail": "未观察到不能判断未经过；空闲、采样上限、加速及其他协议会影响覆盖"}
+		p := map[string]any{"state": "unknown", "label": "尚未观察到经旁路由 " + routerIP, "routerIP": routerIP, "source": "后台包头观察", "detail": "未观察到不能判断未经过；空闲、采样上限、加速及其他协议会影响覆盖"}
 		var latest pathReceipt
 		for _, r := range m.seen {
 			// IPv6 may be linked to the same known L2 device; expose the actual observed IP.
@@ -227,9 +227,9 @@ func (m *pathPresence) decorate(byIP map[string]map[string]any, byID map[string]
 			}
 		}
 		if !latest.At.IsZero() && now.Sub(latest.At) < 24*time.Hour {
-			state, label := "historical", "曾观察到经旁路由"
+			state, label := "historical", "曾观察到经旁路由 "+routerIP
 			if now.Sub(latest.At) < 2*time.Minute {
-				state, label = "recent", "流量经旁路由"
+				state, label = "recent", "流量经旁路由 "+routerIP
 			}
 			p["state"], p["label"], p["observedAt"], p["observedIP"] = state, label, latest.At.Format(time.RFC3339), latest.IP
 			p["detail"] = "公网目的 IP 的请求包以本机为下一跳 MAC；证明请求交付，不等于成功转发或全部流量受控"
@@ -244,7 +244,7 @@ func (m *pathPresence) decorate(byIP map[string]map[string]any, byID map[string]
 					out = append(out, l)
 				}
 				links = out
-				links = append(links, map[string]any{"id": fmt.Sprintf("observed-%s-doctor", byID[ip]), "from": byID[ip], "to": byID[routerIP], "relation": "gateway", "confidence": "confirmed", "status": "online", "availability": "available", "observedAt": latest.At.Format(time.RFC3339), "source": p["detail"], "pathObserved": true, "measured": false})
+				links = append(links, map[string]any{"id": fmt.Sprintf("observed-%s-doctor", byID[ip]), "from": byID[ip], "to": byID[routerIP], "relation": "gateway", "confidence": "confirmed", "status": "online", "availability": "available", "observedAt": latest.At.Format(time.RFC3339), "source": p["detail"], "pathObserved": true, "pathNode": routerIP, "measured": false})
 			}
 		}
 		d["bypassPath"] = p

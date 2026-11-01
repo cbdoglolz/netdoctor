@@ -522,7 +522,7 @@ export function Topology({
           animationDuration: `${Math.max(0.3, 3 - Math.log10(1 + (l.downloadMbps || 0) + (l.uploadMbps || 0)))}s`,
           strokeDasharray: l.confidence === 'inferred' ? '6 5' : undefined,
         },
-        label: l.pathObserved ? (l.pathNode ? '远端证据 → 旁路由':'流量 → 旁路由') : snapshot.live
+        label: l.pathObserved ? `流量 → 旁路由 ${l.pathNode || snapshot.devices.find(d=>d.id === l.to)?.ip || '地址未知'}` : snapshot.live
           ? `${l.relation === 'gateway' ? '手动网关' : l.relation === 'virtual' ? '虚拟连接' : l.relation === 'wireless' ? '无线关联' : '物理接线'}${l.confidence === 'inferred' ? ' · 待核实' : ''}${l.measured ? ` ↓${(l.downloadMbps || 0).toFixed(2)} ↑${(l.uploadMbps || 0).toFixed(2)} Mbps` : ''}`
           : !compact && l.confidence === 'inferred'
             ? '推测'

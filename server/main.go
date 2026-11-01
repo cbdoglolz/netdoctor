@@ -29,7 +29,7 @@ import (
 
 //go:embed web/*
 var web embed.FS
-var version = "0.3.7"
+var version = "0.3.8"
 var sessionPattern = regexp.MustCompile(`^[a-fA-F0-9]{32}$`)
 
 const base = "/opt/homenet-doctor"

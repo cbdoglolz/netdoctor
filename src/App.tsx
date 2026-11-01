@@ -8,7 +8,7 @@ import ServiceSettings from './ServiceSettings';
 import { useLiveSnapshot } from './useLiveSnapshot';
 import packageInfo from '../package.json';
 import VersionSettings from './VersionSettings';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   Activity,
   ArrowDown,
@@ -748,7 +748,7 @@ export default function App() {
                               <strong>{d.name}</strong>
                               <small>{d.model}</small>
                               <small>{d.annotatedAt ? `标注 ${new Date(d.annotatedAt).toLocaleDateString('zh-CN')}` : d.firstRecordedAt ? `首次记录 ${new Date(d.firstRecordedAt).toLocaleDateString('zh-CN')}` : ''}</small>
-                              <BypassBadge path={d.bypassPath} />{d.peerPaths?.map(p=><span className="bypass-badge recent" key={p.nodeIP} title={`${p.node} · ${p.observedAt}`}>流量经 {p.nodeIP}（远端）</span>)}
+                              <BypassBadge path={d.bypassPath} />{d.peerPaths?.map(p=><span className="bypass-badge recent" key={p.nodeIP} title={`${p.node} · ${p.observedAt}`}>流量经旁路由 {p.nodeIP}（远端）</span>)}
                             </span>
                           </button>
                         </td>
@@ -1243,6 +1243,7 @@ function DeviceDetails({
               <dt>连接方式</dt>
               <dd>{d.connection}</dd>
               {d.bypassPath && <><dt>旁路由流量路径</dt><dd><BypassBadge path={d.bypassPath}/><p>{d.bypassPath.detail}</p>{d.bypassPath.observedAt && <small>最近流量观测：{dateText(d.bypassPath.observedAt)} · {d.bypassPath.observedIP}</small>}</dd></>}
+              {d.peerPaths?.map(p=><Fragment key={p.nodeIP}><dt>远端旁路由流量路径</dt><dd><span className="bypass-badge recent">流量经旁路由 {p.nodeIP}（远端）</span><p>{p.node} · 最近观测：{dateText(p.observedAt)}</p></dd></Fragment>)}
               {d.connectionEvidence && (
                 <>
                   <dt>连接证据</dt>

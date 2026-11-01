@@ -59,7 +59,7 @@ export function useLiveSnapshot(range: Range = '24h') {
                     cpu: { ...d.cpu, value: null, availability: 'stale' },
                     memory: { ...d.memory, value: null, availability: 'stale' },
                     traffic: { ...d.traffic, value: null, availability: 'stale' },
-                    bypassPath: d.bypassPath?.state === 'recent' ? {...d.bypassPath, state: 'historical', label: '历史路径 · 数据已过期'} : d.bypassPath,
+                    bypassPath: d.bypassPath?.state === 'recent' ? {...d.bypassPath, state: 'historical', label: `历史路径${d.bypassPath.routerIP ? ` · ${d.bypassPath.routerIP}` : ''} · 数据已过期`} : d.bypassPath,
                   })),
                   links: s.snapshot.links.filter(l=>!l.pathObserved).map(l=>({...l, availability: 'stale', status:'unknown', measured:false})),
                   pathMonitor: {running:false, detail:'采集服务连接中断，路径状态未知', source:'页面数据已过期'},

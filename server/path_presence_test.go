@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 )
@@ -37,6 +38,12 @@ func TestPresenceFreshHistoricalExpiryAndIPReuse(t *testing.T) {
 		devices := map[string]map[string]any{ip: {"mac": c.mac}, "192.168.1.6": {}}
 		links, _ := m.decorate(devices, map[string]string{ip: "client", "192.168.1.6": "doctor"}, nil, now, "192.168.1.6")
 		p := devices[ip]["bypassPath"].(map[string]any)
+		if p["routerIP"] != "192.168.1.6" || !strings.Contains(p["label"].(string), "192.168.1.6") {
+			t.Fatal("path lost collector identity", p)
+		}
+		if len(links) > 0 && links[0].(map[string]any)["pathNode"] != "192.168.1.6" {
+			t.Fatal("edge lost collector identity", links)
+		}
 		if p["state"] != c.state || len(links) != c.edges {
 			t.Fatal(p, links, c)
 		}

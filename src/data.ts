@@ -62,7 +62,7 @@ export interface Device {
   customIcon?: string;
   monitorDisabled?: boolean;
   connectionEvidence?: string;
-  bypassPath?: { state: 'unknown' | 'recent' | 'historical'; label: string; detail: string; observedAt?: string; observedIP?: string };
+  bypassPath?: { routerIP?: string; state: 'unknown' | 'recent' | 'historical'; label: string; detail: string; observedAt?: string; observedIP?: string };
 }
 export interface TopologyLink {
  pathNode?: string;
