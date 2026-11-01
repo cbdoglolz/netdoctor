@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -55,5 +56,15 @@ func TestConnectionFailureRetainsStaleEvidence(t *testing.T) {
 	defer connectionCache.RUnlock()
 	if connectionCache.data.Availability != "stale" || len(connectionCache.data.Items) != 1 || connectionCache.data.ObservedAt != "2026-01-01T00:00:00Z" {
 		t.Fatal(connectionCache.data)
+	}
+}
+func TestVisibleConnectionsAggregateOutputCap(t *testing.T) {
+	var b strings.Builder
+	for i := 1; i <= 1100; i++ {
+		fmt.Fprintf(&b, "tcp 6 50 SYN_SENT src=192.168.1.10 dst=1.1.1.1 sport=123 dport=%d src=1.1.1.1 dst=192.168.1.10 sport=%d dport=123\n", i, i)
+	}
+	rows, n, limited := parseVisibleConnections([]byte(b.String()), map[string]bool{"192.168.1.10": true}, nil)
+	if n != 1100 || len(rows) != 1000 || !limited {
+		t.Fatal(len(rows), n, limited)
 	}
 }
