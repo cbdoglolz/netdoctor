@@ -210,6 +210,7 @@ func collect() map[string]any {
 	b, _ := json.Marshal(engine.snapshot)
 	var value map[string]any
 	json.Unmarshal(b, &value)
+	overlayCatalogSnapshot(value)
 	return value
 }
 func runTimeout(timeout time.Duration, args ...string) ([]byte, error) {
@@ -407,6 +408,12 @@ func (e *runtimeEngine) sample() {
 		}
 	}
 	remoteNotes := sharedPeerNotes()
+	catalog.RLock()
+	sharedEnabled := catalog.settings.Enabled
+	catalog.RUnlock()
+	if sharedEnabled {
+		remoteNotes = map[string]peerAnnotation{}
+	}
 	forwarding := observeForwarding()
 	macCounts := map[string]int{}
 	for _, d := range byIP {
@@ -753,6 +760,7 @@ func configAPI(w http.ResponseWriter, r *http.Request) {
 			v.Password = ""
 			c.Integrations[key] = v
 		}
+		overlayCatalogConfig(&c)
 		reply(w, 200, c)
 		return
 	}
@@ -766,12 +774,23 @@ func configAPI(w http.ResponseWriter, r *http.Request) {
 		reply(w, 400, map[string]string{"error": "配置格式错误"})
 		return
 	}
+	for _, d := range c.Devices {
+		if e := catalogDeviceWriteAllowed(d); e != nil {
+			reply(w, 409, map[string]string{"error": e.Error()})
+			return
+		}
+	}
 	if err := validateConfig(c); err != nil {
 		reply(w, 400, map[string]string{"error": err.Error()})
 		return
 	}
 	engine.mu.Lock()
-	defer engine.mu.Unlock()
+	locked := true
+	defer func() {
+		if locked {
+			engine.mu.Unlock()
+		}
+	}()
 	for key, v := range c.Integrations {
 		if v.Password == "" {
 			v.Password = engine.config.Integrations[key].Password
@@ -788,7 +807,13 @@ func configAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	engine.config = c
-	reply(w, 200, map[string]string{"message": "服务端设置已保存，下一轮采集生效"})
+	engine.mu.Unlock()
+	locked = false
+	msg := syncCatalogOnce()
+	if msg == "" {
+		msg = "服务端设置已保存，下一轮采集生效"
+	}
+	reply(w, 200, map[string]string{"message": msg})
 }
 func historyAPI(w http.ResponseWriter, r *http.Request) {
 	hours := 24

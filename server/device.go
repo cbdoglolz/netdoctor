@@ -43,8 +43,17 @@ func deviceAPI(w http.ResponseWriter, r *http.Request) {
 		reply(w, 400, map[string]string{"error": "设备标注无效"})
 		return
 	}
+	if e := catalogDeviceWriteAllowed(d); e != nil {
+		reply(w, 409, map[string]string{"error": e.Error()})
+		return
+	}
 	engine.mu.Lock()
-	defer engine.mu.Unlock()
+	locked := true
+	defer func() {
+		if locked {
+			engine.mu.Unlock()
+		}
+	}()
 	c := engine.config
 	c.Devices = append([]deviceConfig{}, c.Devices...)
 	found := false
@@ -93,5 +102,11 @@ func deviceAPI(w http.ResponseWriter, r *http.Request) {
 		reply(w, 500, map[string]string{"error": "备注已保存，但更新时间写入失败"})
 		return
 	}
-	reply(w, 200, map[string]string{"message": "设备标注已保存，下一轮采集生效"})
+	engine.mu.Unlock()
+	locked = false
+	msg := syncCatalogOnce()
+	if msg == "" {
+		msg = "设备标注已保存，下一轮采集生效"
+	}
+	reply(w, 200, map[string]string{"message": msg})
 }

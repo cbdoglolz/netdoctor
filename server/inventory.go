@@ -129,6 +129,10 @@ func layoutAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.Method == "GET" {
+		if p, ok := replicaLayout(layer); ok {
+			reply(w, 200, p)
+			return
+		}
 		var b string
 		if engine.db.QueryRow("SELECT payload FROM ui_layout WHERE id=?", layer).Scan(&b) != nil {
 			reply(w, 200, map[string]any{})
@@ -143,6 +147,10 @@ func layoutAPI(w http.ResponseWriter, r *http.Request) {
 		reply(w, 405, map[string]string{"error": "POST required"})
 		return
 	}
+	if catalogReplica() {
+		reply(w, 409, map[string]string{"error": "布局由管理中心统一维护，请到管理中心修改"})
+		return
+	}
 	var p map[string]layoutPoint
 	if json.NewDecoder(http.MaxBytesReader(w, r.Body, 96<<10)).Decode(&p) != nil || !validLayout(p) {
 		reply(w, 400, map[string]string{"error": "布局坐标无效或超限"})
@@ -153,5 +161,9 @@ func layoutAPI(w http.ResponseWriter, r *http.Request) {
 		reply(w, 500, map[string]string{"error": "保存失败"})
 		return
 	}
-	reply(w, 200, map[string]string{"message": fmt.Sprintf("已保存 %d 个节点的位置，电脑与手机共用", len(p))})
+	msg := syncCatalogOnce()
+	if msg == "" {
+		msg = fmt.Sprintf("已保存 %d 个节点的位置，电脑与手机共用", len(p))
+	}
+	reply(w, 200, map[string]string{"message": msg})
 }

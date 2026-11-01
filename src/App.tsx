@@ -1,3 +1,4 @@
+import CatalogSync from './CatalogSync';
 import DeviceControl from './DeviceControl';
 import Peers from './Peers';
 import Connections from './Connections';
@@ -70,6 +71,7 @@ const pages = [
   { id: 'traffic', title: '流量与访问', icon: Activity },
   { id: 'alerts', title: '告警与诊断', icon: Bell },
   { id: 'path', title: '路径验证', icon: Network },
+  { id: 'catalog', title: '同步备份', icon: ShieldCheck },
   { id: 'control', title: '设备控制', icon: SlidersHorizontal },
   { id: 'peers', title: '节点联动', icon: Network },
   { id: 'settings', title: '设置', icon: Settings2 },
@@ -1071,6 +1073,7 @@ export default function App() {
             </>
           )}
 
+          {page === 'catalog' && (live ? <CatalogSync/> : <p>公共资料同步仅在真实服务中提供。</p>)}
           {page === 'control' && (live ? <DeviceControl initialIP={controlIP}/> : <p>设备控制仅在真实采集服务中提供。</p>)}
           {page === 'peers' && (live ? <Peers/> : <p>节点联动仅在真实采集服务中提供。</p>)}
           {page === 'path' && <PathObservation live={live} />}

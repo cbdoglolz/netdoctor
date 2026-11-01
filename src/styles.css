@@ -2605,3 +2605,9 @@ dd {
 .control-page .panel-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:20px 20px 12px; }
 .control-page .panel-heading h2 { margin:0; font-size:15px; font-weight:600; }
 .control-kind { font-size:11px; color:#3473ba; background:#eff6ff; border-radius:6px; padding:5px 8px; white-space:nowrap; }
+
+.catalog-public-fields { border:0; padding:0; margin:0; display:grid; gap:14px; min-width:0; }
+.catalog-public-fields:disabled { opacity:.65; }
+.catalog-facts { display:grid; grid-template-columns:max-content minmax(0,1fr); gap:10px 20px; font-size:13px; }
+.catalog-facts dd { margin:0; overflow-wrap:anywhere; }
+@media(max-width:600px) { .mobile-nav button { min-width:0; flex:1; padding:4px 0; } .mobile-nav button svg { width:19px; height:19px; } .catalog-facts { grid-template-columns:1fr; gap:5px; } .catalog-facts dd { margin-bottom:8px; } }

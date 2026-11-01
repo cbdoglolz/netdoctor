@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { kindLabels, type Device, type DeviceKind } from './data';
 import { DeviceIcon, DeviceBadge } from './components';
 
@@ -71,6 +71,8 @@ export function MonitoringButton({
 }
 export default function DeviceEditor({ device: d, live }: { device: Device; live: boolean }) {
   const [open, setOpen] = useState(false);
+ const [managerURL,setManagerURL]=useState('');
+ useEffect(()=>{if(live)fetch('/api/catalog').then(r=>r.json()).then(v=>{if(v.enabled&&!v.isManager)setManagerURL(v.managerURL)}).catch(()=>{});},[live]);
   const [form, setForm] = useState<Awaited<ReturnType<typeof deviceConfig>> | null>(null);
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
@@ -120,6 +122,8 @@ export default function DeviceEditor({ device: d, live }: { device: Device; live
       </button>
       {open && form && (
         <div className="device-edit-form">
+ {managerURL&&<p>公共资料由管理中心统一维护。<a href={managerURL+'/#devices'} target="_blank" rel="noreferrer">前往编辑备注、类型与图标</a>；下方监测开关仅作用于本机。</p>}
+ <fieldset disabled={!!managerURL} className="catalog-public-fields">
           <label>
             自定义备注名称
             <input
@@ -162,6 +166,7 @@ export default function DeviceEditor({ device: d, live }: { device: Device; live
               }}
             />
           </label>
+          </fieldset>
           <label>
             <input
               type="checkbox"

@@ -175,9 +175,14 @@ func localPeerPayload() peerPayload {
 			notes = append(notes, peerAnnotation{d.IP, d.Name, d.Kind, d.Model, d.Group, d.Icon, d.CustomIcon})
 		}
 	}
+	overlayCatalogSnapshot(snapshot)
 	return peerPayload{1, c.ID, c.Name, version, snapshot, notes}
 }
 func peerReadHandler(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == "/catalog" {
+		catalogHandler(w, r)
+		return
+	}
 	if r.URL.Path == "/control" {
 		peerControlHandler(w, r)
 		return

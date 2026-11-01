@@ -29,7 +29,7 @@ import (
 
 //go:embed web/*
 var web embed.FS
-var version = "0.4.0"
+var version = "0.4.1"
 var sessionPattern = regexp.MustCompile(`^[a-fA-F0-9]{32}$`)
 
 const base = "/opt/homenet-doctor"
@@ -113,6 +113,16 @@ func main() {
 	} else {
 		go func() { defer close(controlDone); runControls(ctx) }()
 	}
+	catalogDone := make(chan struct{})
+	if err := initCatalog(engine.dir); err != nil {
+		log.Printf("Catalog unavailable: %v", err)
+		catalog.Lock()
+		catalog.err = err.Error()
+		catalog.Unlock()
+		close(catalogDone)
+	} else {
+		go func() { defer close(catalogDone); runCatalog(ctx) }()
+	}
 	go engine.run(ctx)
 	connectionsDone := make(chan struct{})
 	go func() { defer close(connectionsDone); runConnections(ctx) }()
@@ -144,6 +154,7 @@ func main() {
 	mux.HandleFunc("/api/connections", connectionsAPI)
 	mux.HandleFunc("/api/peers", peersAPI)
 	mux.HandleFunc("/api/control", controlAPI)
+	mux.HandleFunc("/api/catalog", catalogAPI)
 	mux.HandleFunc("/api/path-observation", pathObservationAPI)
 	mux.HandleFunc("/api/history", historyAPI)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -178,6 +189,7 @@ func main() {
 		<-connectionsDone
 		<-peersDone
 		<-controlDone
+		<-catalogDone
 		shutdown, stop := context.WithTimeout(context.Background(), 5*time.Second)
 		defer stop()
 		server.Shutdown(shutdown)
