@@ -130,23 +130,7 @@ export default function ServiceSettings() {
                               })
                             }
                           >
-                            {[
-                              'gateway',
-                              'switch',
-                              'ap',
-                              'server',
-                              'computer',
-                              'phone',
-                              'iot',
-                              'tablet',
-                              'tv',
-                              'camera',
-                              'printer',
-                              'speaker',
-                              'nas',
-                              'hypervisor',
-                              'vm',
-                            ].map((k) => (
+                            {Object.keys(kindLabels).map((k) => (
                               <option key={k} value={k}>
                                 {kindLabels[k as DeviceKind]}
                               </option>

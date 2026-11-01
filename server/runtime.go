@@ -20,13 +20,16 @@ import (
 )
 
 type deviceConfig struct {
-	IP      string `json:"ip"`
-	Name    string `json:"name"`
-	Kind    string `json:"kind"`
-	Model   string `json:"model"`
-	Gateway string `json:"gateway"`
-	Passive bool   `json:"passive"`
-	Key     bool   `json:"key"`
+	Icon            string `json:"icon,omitempty"`
+	CustomIcon      string `json:"customIcon,omitempty"`
+	MonitorDisabled bool   `json:"monitorDisabled"`
+	IP              string `json:"ip"`
+	Name            string `json:"name"`
+	Kind            string `json:"kind"`
+	Model           string `json:"model"`
+	Gateway         string `json:"gateway"`
+	Passive         bool   `json:"passive"`
+	Key             bool   `json:"key"`
 }
 type manualLink struct {
 	From     string `json:"from"`
@@ -92,7 +95,7 @@ func validateConfig(c runtimeConfig) error {
 	if c.Interval < 5 || c.Interval > 300 || c.Cache < 16 || c.Cache > 512 || c.Storage < 128 || c.Storage > 8192 || c.Retention < 1 || c.Retention > 365 || len(c.Devices) > 512 || len(c.Links) > 1024 {
 		return errors.New("监测参数超出允许范围")
 	}
-	kinds := map[string]bool{"gateway": true, "switch": true, "ap": true, "server": true, "computer": true, "phone": true, "iot": true, "tablet": true, "tv": true, "camera": true, "printer": true, "speaker": true, "nas": true, "hypervisor": true, "vm": true}
+	kinds := map[string]bool{"gateway": true, "switch": true, "ap": true, "server": true, "computer": true, "phone": true, "iot": true, "tablet": true, "tv": true, "camera": true, "printer": true, "speaker": true, "nas": true, "hypervisor": true, "vm": true, "console": true, "settop": true, "monitor": true, "fan": true, "amplifier": true, "hub": true, "light": true}
 	seen := map[string]bool{}
 	parents := map[string]string{}
 	for _, d := range c.Devices {
@@ -105,6 +108,12 @@ func validateConfig(c runtimeConfig) error {
 		}
 		if net.ParseIP(d.IP) == nil && !strings.HasPrefix(d.IP, "node-") {
 			return errors.New("设备 IP 无效")
+		}
+		if err := validateIcon(d.CustomIcon); err != nil {
+			return err
+		}
+		if d.Icon != "" && !kinds[d.Icon] {
+			return errors.New("图标类型无效")
 		}
 		if !kinds[d.Kind] || len(d.Name) > 100 || len(d.Model) > 100 || len(d.Gateway) > 100 {
 			return errors.New("设备信息无效")
@@ -296,7 +305,7 @@ func (e *runtimeEngine) sample() {
 	for _, ip := range ips {
 		d := byIP[ip]
 		cfg := settings[ip]
-		if ip == localIP() || net.ParseIP(ip) == nil || cfg.Passive {
+		if ip == localIP() || net.ParseIP(ip) == nil || cfg.Passive || cfg.MonitorDisabled {
 			continue
 		}
 		last := probes[ip]
@@ -366,6 +375,7 @@ func (e *runtimeEngine) sample() {
 			}
 		}
 	}
+	forwarding := observeForwarding()
 	byID := map[string]string{}
 	for ip, d := range byIP {
 		cfg := settings[ip]
@@ -433,6 +443,13 @@ func (e *runtimeEngine) sample() {
 			d["uploadMbps"] = rate.TX
 		}
 		d["identitySource"] = d["source"]
+		d["icon"] = cfg.Icon
+		d["customIcon"] = cfg.CustomIcon
+		d["monitorDisabled"] = cfg.MonitorDisabled
+		if cfg.MonitorDisabled {
+			d["latency"] = observation(nil, "unsupported", "主动监测已关闭", stamp)
+			delete(d, "loss")
+		}
 		if cfg.Passive {
 			d["history"] = []string{"已设为被动监测，不执行定时 ICMP"}
 		}
@@ -440,8 +457,17 @@ func (e *runtimeEngine) sample() {
 			firstByte, _ := strconv.ParseUint(strings.Split(mac, ":")[0], 16, 8)
 			d["randomizedMac"] = firstByte&2 != 0
 		}
+		d["connectionEvidence"] = "只有邻居 / 探测证据，无法确定物理接线或客户端网关"
+		if forwarding[ip] {
+			d["connection"] = "已观察到经本机的外部连接"
+			d["connectionEvidence"] = "conntrack 原始方向：该设备到公网的 TCP/UDP 连接；不代表所有流量都经过本机"
+		}
 		if cfg.Gateway != "" {
 			d["connection"] = "逻辑网关 " + cfg.Gateway
+			if forwarding[ip] {
+				d["connection"] = "逻辑网关 " + cfg.Gateway + " · 本机已见转发"
+			}
+			d["connectionEvidence"] = "网关为用户标注；" + d["connectionEvidence"].(string)
 		}
 		if cfg.Name != "" && mac != "" {
 			e.db.Exec("INSERT OR REPLACE INTO identities(mac,ip,name,kind,model) VALUES(?,?,?,?,?)", mac, ip, cfg.Name, cfg.Kind, cfg.Model)
@@ -512,17 +538,40 @@ func (e *runtimeEngine) sample() {
 		caps = append(caps, map[string]any{"name": v.name, "availability": v.state, "detail": v.detail, "source": "后台采集能力", "observedAt": stamp})
 	}
 	raw["capabilities"] = caps
-	for ip, cfg := range settings {
-		if cfg.Key && cfg.Kind == "phone" {
-			if p, ok := probes[ip]; ok && now.Sub(p.At) < 2*time.Minute {
-				metrics := raw["metrics"].(map[string]any)
-				if p.Success {
-					metrics["latency"] = observation(p.Latency, "available", "关键手机 ICMP（不是互联网延迟）", stamp)
-				}
-				metrics["loss"] = observation(p.Loss, "available", "关键手机 ICMP", stamp)
+	// Probe the router's external path, independently of any client device.
+	e.probeMu.Lock()
+	var externalLatency *float64
+	var externalLoss *float64
+	for _, target := range []string{"1.1.1.1", "223.5.5.5"} {
+		key := "external-" + target
+		p, ok := e.probes[key]
+		if ok && now.Sub(p.At) < 60*time.Second {
+			if p.Success && externalLatency == nil {
+				externalLatency = p.Latency
+				loss := p.Loss
+				externalLoss = &loss
 			}
 		}
+		if !e.pending[key] && now.Sub(p.At) > time.Duration(c.Interval)*time.Second {
+			e.pending[key] = true
+			go func(key, target string) {
+				e.slots <- struct{}{}
+				p := probe(target)
+				<-e.slots
+				e.probeMu.Lock()
+				e.probes[key] = p
+				delete(e.pending, key)
+				e.probeMu.Unlock()
+			}(key, target)
+		}
 	}
+	e.probeMu.Unlock()
+	metrics := raw["metrics"].(map[string]any)
+	if externalLatency != nil {
+		metrics["latency"] = observation(externalLatency, "available", "软路由到公网目标 ICMP RTT；不是全部业务流量延迟", stamp)
+		metrics["loss"] = observation(externalLoss, "available", "公网 ICMP 探测样本", stamp)
+	}
+
 	e.prune(c)
 	points := raw["samples"].([]any)
 	if len(points) > 0 {
@@ -656,7 +705,7 @@ func configAPI(w http.ResponseWriter, r *http.Request) {
 		reply(w, 405, map[string]string{"error": "POST required"})
 		return
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, 128<<10)
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	var c runtimeConfig
 	if json.NewDecoder(r.Body).Decode(&c) != nil {
 		reply(w, 400, map[string]string{"error": "配置格式错误"})

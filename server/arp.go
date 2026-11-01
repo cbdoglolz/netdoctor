@@ -36,7 +36,7 @@ func discoverLAN(config []deviceConfig) map[string]string {
 		}
 		passive := map[string]bool{}
 		for _, d := range config {
-			if d.Passive {
+			if d.Passive || d.MonitorDisabled {
 				passive[d.IP] = true
 			}
 		}

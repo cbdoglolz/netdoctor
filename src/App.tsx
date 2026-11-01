@@ -1,3 +1,4 @@
+import DeviceEditor, { MonitoringButton } from './DeviceEditor';
 import ServiceSettings from './ServiceSettings';
 import { useLiveSnapshot } from './useLiveSnapshot';
 import packageInfo from '../package.json';
@@ -153,9 +154,7 @@ export default function App() {
   const [trafficDevice, setTrafficDevice] = useState('all');
   const [alertFilter, setAlertFilter] = useState('all');
   const [expandedAlert, setExpandedAlert] = useState<string | null>(null);
-  const [alertActions, setAlertActions] = useState<
-    Record<string, { acknowledged?: boolean; mutedUntil?: number }>
-  >({});
+  const [alertActions, setAlertActions] = useState<Record<string, { mutedUntil?: number }>>({});
   const [clock, setClock] = useState(Date.now());
   const liveState = useLiveSnapshot(range);
   const live = liveState.live;
@@ -228,7 +227,7 @@ export default function App() {
       </main>
     );
   return (
-    <div className="app-shell">
+    <div className="app-shell" data-page={page}>
       <aside className="sidebar">
         <a className="brand" href="#overview" onClick={() => navigate('overview')}>
           <span className="brand-mark">
@@ -449,11 +448,15 @@ export default function App() {
                   color="teal"
                 />
                 <MetricCard
-                  label={live ? '关键设备延迟' : '外部网络延迟'}
+                  label={live ? '软路由外网往返延迟' : '外部网络延迟'}
                   value={snapshot.metrics.latency}
                   unit="ms"
                   icon={<Activity size={18} />}
-                  note={`丢包率 ${displayMetric(snapshot.metrics.loss, '%')}`}
+                  note={
+                    live
+                      ? '公网 ICMP 探测 · 非全部业务 RTT'
+                      : `丢包率 ${displayMetric(snapshot.metrics.loss, '%')}`
+                  }
                   color="violet"
                 />
                 <div className="metric-card">
@@ -737,7 +740,11 @@ export default function App() {
                         <td className="mono">{d.ip}</td>
                         <td>{d.connection}</td>
                         <td>
-                          {d.status === 'unresponsive' ? '无响应' : displayMetric(d.latency, ' ms')}
+                          {d.monitorDisabled
+                            ? '监测已关闭'
+                            : d.status === 'unresponsive'
+                              ? '无响应'
+                              : displayMetric(d.latency, ' ms')}
                         </td>
                         <td>{displayMetric(d.traffic, ' GB')}</td>
                         <td>
@@ -885,7 +892,7 @@ export default function App() {
                     <strong>{snapshot.alerts.filter((a) => a.recovered).length}</strong> 已恢复事件
                   </span>
                 </div>
-                <p>确认或忽略提醒不会改变网络健康状态。</p>
+                <p>关闭监测会停止该设备主动探测与报警；忽略一小时仅临时静音。</p>
               </div>
               <Panel
                 title="事件与诊断"
@@ -933,7 +940,6 @@ export default function App() {
                                   : a.severity === 'critical'
                                     ? '严重'
                                     : '提醒'}
-                                {action?.acknowledged ? ' · 已确认' : ''}
                                 {muted ? ' · 已暂时忽略 1 小时' : ''}
                               </small>
                             </span>
@@ -992,20 +998,14 @@ export default function App() {
                           )}
                           {!a.recovered && (
                             <div className="alert-actions">
-                              <button
-                                className="button small"
-                                disabled={action?.acknowledged}
-                                onClick={() => {
-                                  setAlertActions((s) => ({
-                                    ...s,
-                                    [a.id]: { ...s[a.id], acknowledged: true },
-                                  }));
-                                  setNotice('已确认此提醒；异常状态仍依据监测证据');
-                                }}
-                              >
-                                <Check size={14} />
-                                {action?.acknowledged ? '已确认' : '确认提醒'}
-                              </button>
+                              {live && (
+                                <MonitoringButton
+                                  devices={snapshot.devices.filter((d) =>
+                                    a.deviceIds.includes(d.id),
+                                  )}
+                                  onMessage={setNotice}
+                                />
+                              )}
                               <button
                                 className="button small secondary"
                                 onClick={() => {
@@ -1101,6 +1101,7 @@ export default function App() {
       )}
       {currentDevice && (
         <DeviceDetails
+          live={live}
           device={currentDevice}
           alerts={snapshot.alerts.filter((a) => a.deviceIds.includes(currentDevice.id))}
           onClose={() => setSelected(null)}
@@ -1157,11 +1158,13 @@ function MetricCard({
 }
 
 function DeviceDetails({
+  live,
   device: d,
   alerts,
   onClose,
   onAlert,
 }: {
+  live: boolean;
   device: Device;
   alerts: Alert[];
   onClose: () => void;
@@ -1190,7 +1193,7 @@ function DeviceDetails({
         </header>
         <div className="drawer-body">
           <div className="device-hero">
-            <DeviceBadge device={d} />
+            <DeviceEditor device={d} live={live} />
             <h2 id="device-title">{d.name}</h2>
             <p>{d.model}</p>
             <StatusBadge status={d.status} />
@@ -1209,6 +1212,12 @@ function DeviceDetails({
               <dd>{kindLabels[d.kind]}</dd>
               <dt>连接方式</dt>
               <dd>{d.connection}</dd>
+              {d.connectionEvidence && (
+                <>
+                  <dt>连接证据</dt>
+                  <dd>{d.connectionEvidence}</dd>
+                </>
+              )}
               <dt>最近观测</dt>
               <dd>
                 {new Date(d.observedAt).toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' })}{' '}
@@ -1221,9 +1230,11 @@ function DeviceDetails({
             <dl>
               <dt>探测延迟</dt>
               <dd>
-                {d.status === 'unresponsive'
-                  ? '无响应，尚不能确认离线'
-                  : displayMetric(d.latency, ' ms')}
+                {d.monitorDisabled
+                  ? '主动监测已关闭'
+                  : d.status === 'unresponsive'
+                    ? '无响应，尚不能确认离线'
+                    : displayMetric(d.latency, ' ms')}
               </dd>
               {d.loss !== undefined && (
                 <>

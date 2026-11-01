@@ -105,7 +105,13 @@ export function useLiveSnapshot(range: Range = '24h') {
         timer = setInterval(poll, 10000);
       } catch {
         // Only an explicit static-mode response may enable demo data.
-        if (!disposed) setState({ checked: true, live: true, snapshot: null, error: '无法连接采集服务，请检查网络后刷新；未载入演示数据。' });
+        if (!disposed)
+          setState({
+            checked: true,
+            live: true,
+            snapshot: null,
+            error: '无法连接采集服务，请检查网络后刷新；未载入演示数据。',
+          });
       }
     }
     void start();

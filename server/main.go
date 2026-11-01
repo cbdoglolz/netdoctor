@@ -27,7 +27,7 @@ import (
 
 //go:embed web/*
 var web embed.FS
-var version = "0.3.0"
+var version = "0.3.1"
 var sessionPattern = regexp.MustCompile(`^[a-fA-F0-9]{32}$`)
 
 const base = "/opt/homenet-doctor"
@@ -108,6 +108,7 @@ func main() {
 	})
 	mux.HandleFunc("/api/update", update)
 	mux.HandleFunc("/api/config", configAPI)
+	mux.HandleFunc("/api/device", deviceAPI)
 	mux.HandleFunc("/api/history", historyAPI)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-cache")

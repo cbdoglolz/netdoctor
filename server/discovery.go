@@ -1,6 +1,8 @@
 package main
 
 import (
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -60,7 +62,13 @@ func parseMDNS(text string) map[string]discoveredName {
 		case strings.Contains(f[4], "_workstation"):
 			kind = "computer"
 		}
-		result[f[7]] = discoveredName{f[3], kind, "mDNS 缓存 · 服务推断，型号未核实"}
+		result[f[7]] = discoveredName{decodeAvahi(f[3]), kind, "mDNS 缓存 · 服务推断，型号未核实"}
 	}
 	return result
+}
+
+var avahiEscape = regexp.MustCompile(`\\([0-9]{3})`)
+
+func decodeAvahi(s string) string {
+	return avahiEscape.ReplaceAllStringFunc(s, func(v string) string { n, _ := strconv.Atoi(v[1:]); return string([]byte{byte(n)}) })
 }

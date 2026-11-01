@@ -1,5 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import {
+  Gamepad2,
+  RectangleEllipsis,
+  Fan,
+  AudioLines,
+  Lightbulb,
+  RadioTower,
   Camera,
   Printer,
   Speaker,
@@ -37,6 +43,8 @@ import {
   Handle,
   Position,
   ReactFlow,
+  useReactFlow,
+  useNodesInitialized,
   BaseEdge,
   getSmoothStepPath,
   type EdgeProps,
@@ -61,6 +69,13 @@ export const icons = {
   nas: HardDrive,
   hypervisor: Server,
   vm: Boxes,
+  console: Gamepad2,
+  settop: RectangleEllipsis,
+  monitor: Monitor,
+  fan: Fan,
+  amplifier: AudioLines,
+  hub: RadioTower,
+  light: Lightbulb,
 };
 export function DeviceIcon({ kind, size = 20 }: { kind: DeviceKind; size?: number }) {
   const Icon = icons[kind];
@@ -69,7 +84,11 @@ export function DeviceIcon({ kind, size = 20 }: { kind: DeviceKind; size?: numbe
 export function DeviceBadge({ device }: { device: Device }) {
   return (
     <span className={`device-icon ${device.kind}`}>
-      <DeviceIcon kind={device.kind} />
+      {device.customIcon ? (
+        <img className="custom-device-icon" src={device.customIcon} alt="自定义设备图标" />
+      ) : (
+        <DeviceIcon kind={device.icon || device.kind} />
+      )}
     </span>
   );
 }
@@ -206,6 +225,7 @@ type NetworkNode = Node<{
   kind: DeviceKind | 'internet' | 'unknown';
   status: string;
   compact: boolean;
+  customIcon?: string;
   onOpen?: () => void;
 }>;
 function TopologyNode({ data }: NodeProps<NetworkNode>) {
@@ -226,7 +246,11 @@ function TopologyNode({ data }: NodeProps<NetworkNode>) {
     >
       <Handle type="target" position={Position.Top} />
       <div className="node-symbol">
-        <Icon size={data.compact ? 19 : 27} strokeWidth={1.5} />
+        {data.customIcon ? (
+          <img className="custom-device-icon" src={data.customIcon} alt="自定义设备图标" />
+        ) : (
+          <Icon size={data.compact ? 19 : 27} strokeWidth={1.5} />
+        )}
         <i />
       </div>
       <strong>{data.label}</strong>
@@ -287,6 +311,17 @@ export function Topology({
 }) {
   const [layer, setLayer] = useState<'gateway' | 'physical'>('gateway');
   const [showUnlinked, setShowUnlinked] = useState(false);
+  const container = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState({ width: 900, height: 570 });
+  useEffect(() => {
+    const el = container.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) =>
+      setSize({ width: entry.contentRect.width, height: entry.contentRect.height }),
+    );
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   const { nodes, edges } = useMemo(() => {
     const gateway = snapshot.mode === 'gateway';
     const coords: Record<string, [number, number]> = {
@@ -361,8 +396,9 @@ export function Topology({
                 : d.id === 'printer'
                   ? '连接位置待确认'
                   : d.ip,
-          kind: d.ip === 'node-internet' ? ('internet' as const) : d.kind,
+          kind: d.ip === 'node-internet' ? ('internet' as const) : d.icon || d.kind,
           status: d.status,
+          customIcon: d.customIcon,
           compact,
           onOpen: () => onDevice(d.id),
         },
@@ -385,6 +421,11 @@ export function Topology({
       const parent = layer === 'gateway' ? logicalParent : physicalParent;
       const rows = new Map<number, number>();
       let unlinked = 0;
+      const count = nodes.filter((n) => !included.has(n.id)).length;
+      const columns = Math.max(
+        1,
+        Math.ceil(Math.sqrt((((count * size.width) / size.height) * 145) / 190)),
+      );
       for (const n of nodes) {
         let depth = 0,
           id = n.id;
@@ -401,7 +442,7 @@ export function Topology({
         rows.set(depth, col + 1);
         n.position = included.has(n.id)
           ? { x: col * 190, y: depth * 125 }
-          : { x: (unlinked % 3) * 190, y: (5 + Math.floor(unlinked++ / 3)) * 145 };
+          : { x: (unlinked % columns) * 190, y: (5 + Math.floor(unlinked++ / columns)) * 145 };
       }
       if (compact || !showUnlinked) {
         for (let i = nodes.length - 1; i >= 0; i--)
@@ -440,9 +481,13 @@ export function Topology({
         labelStyle: { fill: '#8793a4', fontSize: 10 },
       }));
     return { nodes, edges };
-  }, [snapshot, compact, filter, onDevice, layer, showUnlinked]);
+  }, [snapshot, compact, filter, onDevice, layer, showUnlinked, size]);
   return (
-    <div className={`topology-canvas ${compact ? 'mini' : ''}`} data-testid="topology">
+    <div
+      ref={container}
+      className={`topology-canvas ${compact ? 'mini' : ''}`}
+      data-testid="topology"
+    >
       {snapshot.live && (
         <div className="topology-layer segmented">
           <button
@@ -465,22 +510,53 @@ export function Topology({
         </div>
       )}
       <ReactFlow
-        key={`${snapshot.mode}-${filter}-${compact}-${layer}`}
+        key={`${snapshot.mode}-${filter}-${compact}-${layer}-${showUnlinked}-${Math.round(size.width)}-${Math.round(size.height)}-${nodes.map(n=>n.id).sort().join(",")}`}
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         fitView
         fitViewOptions={{ padding: compact ? 0.12 : 0.18 }}
-        minZoom={0.25}
+        minZoom={0.015}
         maxZoom={1.6}
         nodesDraggable={false}
         nodesConnectable={false}
         onNodeClick={(_, node) => node.id !== 'internet' && onDevice(node.id)}
       >
+        <AutoFit
+          signature={nodes.map((n) => `${n.id}:${n.position.x}:${n.position.y}`).join('|')}
+          width={size.width}
+          height={size.height}
+        />
         <Background gap={22} color="#e3e9f0" />
         {!compact && <Controls showInteractive={false} />}
       </ReactFlow>
     </div>
   );
+}
+
+function AutoFit({
+  signature,
+  width,
+  height,
+}: {
+  signature: string;
+  width: number;
+  height: number;
+}) {
+  const ready = useNodesInitialized();
+  const { fitView } = useReactFlow();
+  useEffect(() => {
+    if (!ready) return;
+    const id = requestAnimationFrame(() => {
+      void fitView({
+        padding: { top: '55px', bottom: '25px', left: '18px', right: '18px' },
+        minZoom: 0.015,
+        maxZoom: 1.3,
+        duration: 250,
+      });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [ready, signature, width, height, fitView]);
+  return null;
 }

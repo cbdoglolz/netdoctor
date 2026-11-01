@@ -16,7 +16,14 @@ export type DeviceKind =
   | 'speaker'
   | 'nas'
   | 'hypervisor'
-  | 'vm';
+  | 'vm'
+  | 'console'
+  | 'settop'
+  | 'monitor'
+  | 'fan'
+  | 'amplifier'
+  | 'hub'
+  | 'light';
 export type Status = 'online' | 'unresponsive' | 'offline' | 'unknown';
 export type Range = '24h' | '7d';
 export interface Observation<T> {
@@ -46,6 +53,10 @@ export interface Device {
   uploadMbps?: number;
   randomizedMac?: boolean;
   macSource?: string;
+  icon?: DeviceKind;
+  customIcon?: string;
+  monitorDisabled?: boolean;
+  connectionEvidence?: string;
 }
 export interface TopologyLink {
   id: string;
@@ -161,6 +172,13 @@ export const kindLabels: Record<DeviceKind, string> = {
   nas: 'NAS',
   hypervisor: '虚拟化宿主机',
   vm: '虚拟机',
+  console: '游戏机',
+  settop: '机顶盒',
+  monitor: '显示器',
+  fan: '风扇',
+  amplifier: '功放',
+  hub: '中枢网关',
+  light: '灯',
 };
 export const statusLabels: Record<Status, string> = {
   online: '在线',
