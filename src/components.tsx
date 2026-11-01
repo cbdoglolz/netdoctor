@@ -593,7 +593,7 @@ function AutoFit({
     if (!ready) return;
     const id = requestAnimationFrame(() => {
       void fitView({
-        padding: { top: '55px', bottom: '25px', left: '18px', right: '18px' },
+        padding: { top: '55px', bottom: height > 300 ? '95px' : '25px', left: '18px', right: '18px' },
         minZoom: 0.015,
         maxZoom: 1.3,
         duration: 250,
