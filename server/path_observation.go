@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"os/exec"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -400,22 +401,36 @@ loop:
 			break loop
 		}
 	}
-	c.Process.Kill()
+	if err != nil {
+		c.Process.Kill()
+	}
 	waitErr := c.Wait()
 	o.mu.Lock()
-	if !strings.Contains(stderr.String(), "packets dropped by kernel") {
+	dropped, hasDropStats := pathDropStats(stderr.String())
+	if !hasDropStats {
 		o.warning("抓包丢包统计未取得，不能证明完整覆盖")
 	}
-	if strings.Contains(stderr.String(), "packets dropped by kernel") && !strings.Contains(stderr.String(), "0 packets dropped by kernel") {
+	if hasDropStats && dropped > 0 {
 		o.warning("抓包报告内核丢包，覆盖不完整")
 	}
 	if err != nil && err != io.EOF && round.Err() == nil {
 		o.warning("抓包解析未完成，覆盖不完整")
 	}
-	if waitErr != nil && round.Err() == nil && err == nil {
+	if waitErr != nil && round.Err() == nil {
 		o.warning("抓包进程提前退出，覆盖不完整")
 	}
 	o.mu.Unlock()
+}
+
+var pathDropPattern = regexp.MustCompile(`(?m)^([0-9]+) packets dropped by kernel\s*$`)
+
+func pathDropStats(text string) (uint64, bool) {
+	m := pathDropPattern.FindStringSubmatch(text)
+	if len(m) != 2 {
+		return 0, false
+	}
+	n, err := strconv.ParseUint(m[1], 10, 64)
+	return n, err == nil
 }
 func (o *pathObserver) run(ctx context.Context) {
 	defer close(o.done)

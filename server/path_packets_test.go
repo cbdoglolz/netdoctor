@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"net"
 	"net/http/httptest"
 	"strings"
@@ -180,5 +181,17 @@ func TestCleanupRequiresOwnedTableNotJustMatchingText(t *testing.T) {
 		if ownedPathTable([]byte(data)) {
 			t.Fatal("foreign/unknown table would be deleted")
 		}
+	}
+}
+
+func TestDropStatsDoNotMistakeTenForZero(t *testing.T) {
+	for _, n := range []uint64{0, 10, 100} {
+		got, ok := pathDropStats(fmt.Sprintf("10000 packets captured\n%d packets dropped by kernel\n", n))
+		if !ok || got != n {
+			t.Fatal(n, got, ok)
+		}
+	}
+	if _, ok := pathDropStats("process killed"); ok {
+		t.Fatal("missing statistics treated as no loss")
 	}
 }
