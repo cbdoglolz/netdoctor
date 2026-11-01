@@ -45,7 +45,7 @@ import {
   MarkerType,
   ReactFlow,
   useReactFlow,
-  type NodeChange,
+  useNodesState,
   useNodesInitialized,
   BaseEdge,
   getSmoothStepPath,
@@ -324,6 +324,7 @@ export function Topology({
   const [layer, setLayer] = useState<'gateway' | 'physical'>('gateway');
   const [showUnlinked, setShowUnlinked] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [flowNodes, setFlowNodes, onFlowNodesChange] = useNodesState<NetworkNode>([]);
   const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({});
   const [layoutMessage, setLayoutMessage] = useState('');
   const [layoutReady, setLayoutReady] = useState(false);
@@ -520,6 +521,7 @@ export function Topology({
       }));
     return { nodes, edges };
   }, [snapshot, compact, filter, onDevice, layer, showUnlinked, size]);
+  useEffect(()=>{if(!editing)setFlowNodes(nodes.map(n=>({...n,position:positions[n.id]||n.position})));},[nodes,positions,editing,setFlowNodes]);
   return (
     <div
       ref={container}
@@ -550,8 +552,9 @@ export function Topology({
       {!compact && snapshot.live && <div className="layout-tools"><button className="button small" disabled={!layoutReady} onClick={()=>setEditing(!editing)}>{editing?'完成拖动':'调整布局'}</button><button className="button small" disabled={!layoutReady} onClick={()=>void saveLayout()}>保存布局</button><button className="button small" disabled={!layoutReady} onClick={()=>void saveLayout(true)}>恢复自动分层</button><small role="status">{layoutMessage || (editing?'拖动节点调整位置，再保存；切换页面前请保存。':'终端统一置于最下层；上网路径与物理连接分开。')}</small></div>}
       <ReactFlow
         key={`${snapshot.mode}-${filter}-${compact}-${layer}-${showUnlinked}-${Math.round(size.width)}-${Math.round(size.height)}-${nodes.map(n=>n.id).sort().join(",")}`}
-        nodes={nodes.map(n=>({...n,position:positions[n.id]||n.position}))}
-        onNodesChange={(changes:NodeChange[])=>{const dragged=changes.filter(c=>c.type==='position' && c.dragging!==undefined && c.position);if(editing && dragged.length)setPositions(p=>{const next={...p};for(const c of dragged)if(c.type==='position'&&c.position)next[c.id]=c.position;return next;});}}
+        nodes={flowNodes}
+        onNodesChange={onFlowNodesChange}
+        onNodeDragStop={(_,node)=>setPositions(p=>({...p,[node.id]:node.position}))}
         edges={edges}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
