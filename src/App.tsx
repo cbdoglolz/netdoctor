@@ -1,3 +1,4 @@
+import PathObservation from './PathObservation';
 import DeviceEditor, { MonitoringButton } from './DeviceEditor';
 import ServiceSettings from './ServiceSettings';
 import { useLiveSnapshot } from './useLiveSnapshot';
@@ -62,6 +63,7 @@ const pages = [
   { id: 'devices', title: '设备列表', icon: Radio },
   { id: 'traffic', title: '流量与访问', icon: Activity },
   { id: 'alerts', title: '告警与诊断', icon: Bell },
+  { id: 'path', title: '路径验证', icon: Network },
   { id: 'settings', title: '设置', icon: Settings2 },
 ] as const;
 type Page = (typeof pages)[number]['id'];
@@ -1048,6 +1050,7 @@ export default function App() {
             </>
           )}
 
+          {page === 'path' && <PathObservation live={live} />}
           {page === 'settings' && (
             <SettingsPage
               key={`${settings.mode}-${settings.interval}-${settings.cache}-${settings.storage}-${settings.retention}`}

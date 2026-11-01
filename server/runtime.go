@@ -156,7 +156,7 @@ func openEngine(dir string) (*runtimeEngine, error) {
 		return nil, e
 	}
 	db.SetMaxOpenConns(1)
-	_, e = db.Exec(`PRAGMA journal_mode=WAL; PRAGMA busy_timeout=3000; CREATE TABLE IF NOT EXISTS samples(ts INTEGER PRIMARY KEY,payload TEXT NOT NULL); CREATE TABLE IF NOT EXISTS usage(ts INTEGER,identity TEXT,rx REAL,tx REAL,PRIMARY KEY(ts,identity)); CREATE TABLE IF NOT EXISTS identities(mac TEXT PRIMARY KEY,ip TEXT,name TEXT,kind TEXT,model TEXT); CREATE INDEX IF NOT EXISTS usage_time ON usage(ts); CREATE TABLE IF NOT EXISTS accounting(ip TEXT PRIMARY KEY,rx REAL,tx REAL,ts INTEGER); CREATE TABLE IF NOT EXISTS events(ts INTEGER,identity TEXT,status TEXT); CREATE INDEX IF NOT EXISTS event_identity ON events(identity,ts);`)
+	_, e = db.Exec(`PRAGMA journal_mode=WAL; PRAGMA busy_timeout=3000; CREATE TABLE IF NOT EXISTS path_reports(id TEXT PRIMARY KEY,created INTEGER,payload TEXT); CREATE TABLE IF NOT EXISTS samples(ts INTEGER PRIMARY KEY,payload TEXT NOT NULL); CREATE TABLE IF NOT EXISTS usage(ts INTEGER,identity TEXT,rx REAL,tx REAL,PRIMARY KEY(ts,identity)); CREATE TABLE IF NOT EXISTS identities(mac TEXT PRIMARY KEY,ip TEXT,name TEXT,kind TEXT,model TEXT); CREATE INDEX IF NOT EXISTS usage_time ON usage(ts); CREATE TABLE IF NOT EXISTS accounting(ip TEXT PRIMARY KEY,rx REAL,tx REAL,ts INTEGER); CREATE TABLE IF NOT EXISTS events(ts INTEGER,identity TEXT,status TEXT); CREATE INDEX IF NOT EXISTS event_identity ON events(identity,ts);`)
 	if e != nil {
 		db.Close()
 		return nil, e
@@ -468,13 +468,13 @@ func (e *runtimeEngine) sample() {
 		}
 		d["connectionEvidence"] = "只有邻居 / 探测证据，无法确定物理接线或客户端网关"
 		if forwarding[ip] {
-			d["connection"] = "已观察到经本机的外部连接"
+			d["connection"] = "连接跟踪表中观察到相关连接"
 			d["connectionEvidence"] = "conntrack 原始方向：该设备到公网的 TCP/UDP 连接；不代表所有流量都经过本机"
 		}
 		if cfg.Gateway != "" {
 			d["connection"] = "逻辑网关 " + cfg.Gateway
 			if forwarding[ip] {
-				d["connection"] = "逻辑网关 " + cfg.Gateway + " · 本机已见转发"
+				d["connection"] = "逻辑网关 " + cfg.Gateway + " · 观察到连接记录"
 			}
 			d["connectionEvidence"] = "网关为用户标注；" + d["connectionEvidence"].(string)
 		}

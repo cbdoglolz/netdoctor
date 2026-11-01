@@ -2521,4 +2521,52 @@ dd {
   }
 }
 
-@media(max-width:600px){.app-shell[data-page="topology"] .page-heading,.app-shell[data-page="topology"] .demo-toolbar,.app-shell[data-page="topology"] .coverage-note.inset{display:none}.app-shell[data-page="topology"] .topology-canvas:not(.mini){height:calc(100svh - 275px);min-height:300px}.app-shell[data-page="topology"] .topology-caption{font-size:9px;gap:8px;padding:10px;flex-wrap:wrap}}
+@media (max-width: 600px) {
+  .app-shell[data-page='topology'] .page-heading,
+  .app-shell[data-page='topology'] .demo-toolbar,
+  .app-shell[data-page='topology'] .coverage-note.inset {
+    display: none;
+  }
+  .app-shell[data-page='topology'] .topology-canvas:not(.mini) {
+    height: calc(100svh - 275px);
+    min-height: 300px;
+  }
+  .app-shell[data-page='topology'] .topology-caption {
+    font-size: 9px;
+    gap: 8px;
+    padding: 10px;
+    flex-wrap: wrap;
+  }
+}
+
+.path-observation li {
+  font-size: 12px;
+  line-height: 1.8;
+  margin: 5px 0;
+}
+.path-observation details {
+  margin: 12px 0;
+  font-size: 12px;
+}
+.path-observation td {
+  white-space: normal;
+  min-width: 130px;
+  vertical-align: top;
+  line-height: 1.7;
+}
+.path-observation .mono {
+  overflow-wrap: anywhere;
+}
+.path-history {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.path-observation summary {
+  cursor: pointer;
+}
+.path-instructions {
+  padding: 12px;
+  background: #f4f8fe;
+  border-radius: 8px;
+}

@@ -17,17 +17,19 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
 //go:embed web/*
 var web embed.FS
-var version = "0.3.1"
+var version = "0.3.2"
 var sessionPattern = regexp.MustCompile(`^[a-fA-F0-9]{32}$`)
 
 const base = "/opt/homenet-doctor"
@@ -88,7 +90,12 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	go engine.run(context.Background())
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+	if err := cleanupPathRules(); err != nil {
+		log.Printf("Path observer cleanup: %v", err)
+	}
+	go engine.run(ctx)
 	static, _ := fs.Sub(web, "web")
 	files := http.FileServer(http.FS(static))
 	mux := http.NewServeMux()
@@ -109,6 +116,7 @@ func main() {
 	mux.HandleFunc("/api/update", update)
 	mux.HandleFunc("/api/config", configAPI)
 	mux.HandleFunc("/api/device", deviceAPI)
+	mux.HandleFunc("/api/path-observation", pathObservationAPI)
 	mux.HandleFunc("/api/history", historyAPI)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-cache")
@@ -135,7 +143,16 @@ func main() {
 	if server.Addr == "" {
 		server.Addr = "127.0.0.1:8088"
 	}
-	log.Fatal(server.ListenAndServe())
+	go func() {
+		<-ctx.Done()
+		paths.stop()
+		shutdown, stop := context.WithTimeout(context.Background(), 5*time.Second)
+		defer stop()
+		server.Shutdown(shutdown)
+	}()
+	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		log.Fatal(err)
+	}
 }
 
 type asset struct {
