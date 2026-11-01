@@ -76,6 +76,17 @@ func deviceAPI(w http.ResponseWriter, r *http.Request) {
 		reply(w, 500, map[string]string{"error": "保存失败"})
 		return
 	}
+	for _, old := range engine.config.Devices {
+		if old.IP == d.IP && old.MonitorDisabled && !d.MonitorDisabled {
+			engine.probeMu.Lock()
+			delete(engine.probes, d.IP)
+			if engine.monitorEpoch == nil {
+				engine.monitorEpoch = map[string]uint64{}
+			}
+			engine.monitorEpoch[d.IP]++
+			engine.probeMu.Unlock()
+		}
+	}
 	engine.config = c
 	stamp := time.Now().Format(time.RFC3339)
 	if _, err := engine.db.Exec("INSERT INTO device_meta(ip,first_seen,last_scan,marked_at,hidden) VALUES(?,?,'',?,0) ON CONFLICT(ip) DO UPDATE SET marked_at=excluded.marked_at", d.IP, stamp, stamp); err != nil {

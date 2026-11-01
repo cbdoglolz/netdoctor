@@ -323,6 +323,12 @@ export function Topology({
 }) {
   const [layer, setLayer] = useState<'gateway' | 'physical'>('gateway');
   const [showUnlinked, setShowUnlinked] = useState(false);
+  const [collapsed,setCollapsed]=useState<string[]>([]);
+  const [snap,setSnap]=useState(true);
+  const [undo,setUndo]=useState<Record<string,{x:number;y:number}>[]>([]);
+  const [redo,setRedo]=useState<Record<string,{x:number;y:number}>[]>([]);
+  const [locked,setLocked]=useState<string[]>([]);
+  const groups=[...new Set(snapshot.devices.map(d=>d.group).filter((g):g is string=>Boolean(g)))];
   const [editing, setEditing] = useState(false);
   const [flowNodes, setFlowNodes, onFlowNodesChange] = useNodesState<NetworkNode>([]);
   const [positions, setPositions] = useState<Record<string,{x:number;y:number}>>({});
@@ -485,8 +491,10 @@ export function Topology({
           if (!included.has(nodes[i].id)) nodes.splice(i, 1);
       }
     }
+    const grouped=new Map<string,string>();
+    for(const g of collapsed){const members=snapshot.devices.filter(d=>d.group===g);const ns=nodes.filter(n=>members.some(d=>d.id===n.id));if(!ns.length)continue;const id='group:'+g;ns.forEach(n=>grouped.set(n.id,id));const pos={x:Math.min(...ns.map(n=>n.position.x)),y:Math.min(...ns.map(n=>n.position.y))};for(let i=nodes.length-1;i>=0;i--)if(grouped.get(nodes[i].id)===id)nodes.splice(i,1);nodes.push({id,type:'network',position:pos,data:{label:g,subtitle:`${members.length} 台 · 点击展开`,kind:'unknown',status:'unknown',compact,onOpen:()=>setCollapsed(v=>v.filter(x=>x!==g))}});}
     const ids = new Set(nodes.map((n) => n.id));
-    const edges = visibleLinks
+    const edges = visibleLinks.map(l=>({...l,from:grouped.get(l.from)||l.from,to:grouped.get(l.to)||l.to})).filter(l=>l.from!==l.to)
       .filter((l) => ids.has(l.from) && ids.has(l.to))
       .map((l) => ({
         id: l.id,
@@ -520,8 +528,8 @@ export function Topology({
         labelStyle: { fill: '#8793a4', fontSize: 10 },
       }));
     return { nodes, edges };
-  }, [snapshot, compact, filter, onDevice, layer, showUnlinked, size]);
-  useEffect(()=>{if(!editing)setFlowNodes(nodes.map(n=>({...n,position:positions[n.id]||n.position})));},[nodes,positions,editing,setFlowNodes]);
+  }, [snapshot, compact, filter, onDevice, layer, showUnlinked, size, collapsed]);
+  useEffect(()=>{setFlowNodes(nodes.map(n=>({...n,position:positions[n.id]||n.position,draggable:!locked.includes(n.id)})));},[nodes,positions,editing,setFlowNodes,locked]);
   return (
     <div
       ref={container}
@@ -549,12 +557,17 @@ export function Topology({
           )}
         </div>
       )}
-      {!compact && snapshot.live && <div className="layout-tools"><button className="button small" disabled={!layoutReady} onClick={()=>setEditing(!editing)}>{editing?'完成拖动':'调整布局'}</button><button className="button small" disabled={!layoutReady} onClick={()=>void saveLayout()}>保存布局</button><button className="button small" disabled={!layoutReady} onClick={()=>void saveLayout(true)}>恢复自动分层</button><small role="status">{layoutMessage || (editing?'拖动节点调整位置，再保存；切换页面前请保存。':'终端统一置于最下层；上网路径与物理连接分开。')}</small></div>}
+      {!compact && snapshot.live && <div className="layout-tools"><button className="button small" disabled={!layoutReady} onClick={()=>setEditing(!editing)}>{editing?'完成拖动':'调整布局'}</button><button className="button small" disabled={!layoutReady} onClick={()=>void saveLayout()}>保存布局</button><button className="button small" disabled={!layoutReady} onClick={()=>void saveLayout(true)}>恢复自动分层</button><button className="button small" onClick={()=>setSnap(!snap)}>{snap?'吸附已开启':'吸附已关闭'}</button><button className="button small" disabled={!undo.length} onClick={()=>{setRedo(v=>[...v,positions]);setPositions(undo[undo.length-1]);setUndo(v=>v.slice(0,-1));}}>撤销</button><button className="button small" disabled={!redo.length} onClick={()=>{setUndo(v=>[...v,positions]);setPositions(redo[redo.length-1]);setRedo(v=>v.slice(0,-1));}}>重做</button><small role="status">{layoutMessage || (editing?'拖动后保存；Shift 框选批量移动；双击节点锁定／解锁（本次页面）。':'终端统一置于最下层；上网路径与物理连接分开。')}</small></div>}
+      {!compact&&groups.length>0&&<div className="group-tools">{groups.map(g=><button className="chip" key={g} onClick={()=>setCollapsed(v=>v.includes(g)?v.filter(x=>x!==g):[...v,g])}>{collapsed.includes(g)?'展开':'折叠'} {g}</button>)}</div>}
       <ReactFlow
         key={`${snapshot.mode}-${filter}-${compact}-${layer}-${showUnlinked}-${Math.round(size.width)}-${Math.round(size.height)}-${nodes.map(n=>n.id).sort().join(",")}`}
         nodes={flowNodes}
         onNodesChange={onFlowNodesChange}
-        onNodeDragStop={(_,node)=>setPositions(p=>({...p,[node.id]:node.position}))}
+        onSelectionDragStop={(_,selected)=>{setUndo(v=>[...v.slice(-29),positions]);setRedo([]);setPositions(p=>({...p,...Object.fromEntries(selected.map(n=>[n.id,n.position]))}));}}
+        onNodeDragStop={(_,node)=>{setUndo(v=>[...v.slice(-29),positions]);setRedo([]);let {x,y}=node.position;if(snap)for(const n of flowNodes)if(n.id!==node.id){if(Math.abs(n.position.x-x)<12)x=n.position.x;if(Math.abs(n.position.y-y)<12)y=n.position.y;}setPositions(p=>({...p,[node.id]:{x,y}}));}}
+        zoomOnDoubleClick={!editing}
+        snapToGrid={snap} snapGrid={[20,20]} selectionOnDrag={editing}
+        onNodeDoubleClick={(_,node)=>{if(editing)setLocked(v=>v.includes(node.id)?v.filter(x=>x!==node.id):[...v,node.id]);}}
         edges={edges}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
@@ -564,7 +577,7 @@ export function Topology({
         maxZoom={1.6}
         nodesDraggable={editing && !compact}
         nodesConnectable={false}
-        onNodeClick={(_, node) => !editing && node.id !== 'internet' && onDevice(node.id)}
+        onNodeClick={(_, node) => node.id.startsWith('group:') ? setCollapsed(v=>v.filter(g=>'group:'+g!==node.id)) : !editing && node.id !== 'internet' && onDevice(node.id)}
       >
         <AutoFit
           signature={nodes.map((n) => `${n.id}:${n.position.x}:${n.position.y}`).join('|')+layoutEpoch}
@@ -593,7 +606,7 @@ function AutoFit({
     if (!ready) return;
     const id = requestAnimationFrame(() => {
       void fitView({
-        padding: { top: '55px', bottom: height > 300 ? '95px' : '25px', left: '18px', right: '18px' },
+        padding: { top: '55px', bottom: height > 300 ? '155px' : '25px', left: '18px', right: '18px' },
         minZoom: 0.015,
         maxZoom: 1.3,
         duration: 250,

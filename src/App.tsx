@@ -1,4 +1,5 @@
-import InventoryControls, {DeleteDevice} from './InventoryControls';
+import {compareDevices} from './device-sort';
+import InventoryControls, {DeleteDevice, ScanChanges} from './InventoryControls';
 import PathObservation from './PathObservation';
 import DeviceEditor, { MonitoringButton } from './DeviceEditor';
 import ServiceSettings from './ServiceSettings';
@@ -153,6 +154,8 @@ export default function App() {
   const [notice, setNotice] = useState('');
   const [search, setSearch] = useState('');
   const [kind, setKind] = useState('all');
+  const [sortKey,setSortKey]=useState('ip');
+  const [sortDir,setSortDir]=useState(1);
   const [status, setStatus] = useState('all');
   const [topologyFilter, setTopologyFilter] = useState('all');
   const [trafficDevice, setTrafficDevice] = useState('all');
@@ -163,7 +166,7 @@ export default function App() {
   const liveState = useLiveSnapshot(range);
   const live = liveState.live;
   const snapshot = liveState.snapshot ?? demoService.getSnapshot(settings.mode, scenario, range);
-  const activeAlerts = snapshot.alerts.filter((a) => !a.recovered);
+  const activeAlerts = snapshot.alerts.filter((a) => !a.recovered && !a.paused);
   const actionableCount = activeAlerts.filter(
     (a) => !(alertActions[a.id]?.mutedUntil && alertActions[a.id].mutedUntil! > clock),
   ).length;
@@ -212,6 +215,7 @@ export default function App() {
       (kind === 'all' || d.kind === kind) &&
       (status === 'all' || (status === 'bypass' ? d.bypassPath?.state === 'recent' : status === 'bypass-history' ? d.bypassPath?.state === 'historical' : status === 'issue' ? d.status !== 'online' : d.status === status)),
   );
+  filteredDevices.sort((a,b)=>compareDevices(a,b,sortKey,sortDir));
   const ranked = snapshot.devices
     .filter(
       (d) =>
@@ -675,8 +679,8 @@ export default function App() {
               title="所有设备"
               subtitle={`${snapshot.devices.length} 台设备 · ${stale ? '当前在线数未知' : `${online} 台在线`}`}
             >
-              {live && <InventoryControls/>}
-              <div className="table-toolbar">
+              {live && <><InventoryControls/><ScanChanges/></>}
+              <div className="table-toolbar"><label>排序 <select aria-label="排序字段" value={sortKey} onChange={e=>setSortKey(e.target.value)}>{[['ip','IP 地址'],['name','设备名称'],['status','状态'],['traffic','流量'],['latency','延迟']].map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></label><button className="button small" onClick={()=>setSortDir(-sortDir)}>{sortDir===1?'升序 ↑':'降序 ↓'}</button>
                 <label className="search-box">
                   <Search size={17} />
                   <input
@@ -721,12 +725,12 @@ export default function App() {
                 <table>
                   <thead>
                     <tr>
-                      <th>设备</th>
-                      <th>状态</th>
-                      <th>IP 地址</th>
+                      <th aria-sort={sortKey==='name'?(sortDir===1?'ascending':'descending'):'none'}><button className="text-button" onClick={()=>{setSortKey('name');setSortDir(sortKey==='name'?-sortDir:1);}}>设备 ↕</button></th>
+                      <th aria-sort={sortKey==='status'?(sortDir===1?'ascending':'descending'):'none'}><button className="text-button" onClick={()=>{setSortKey('status');setSortDir(sortKey==='status'?-sortDir:1);}}>状态 ↕</button></th>
+                      <th aria-sort={sortKey==='ip'?(sortDir===1?'ascending':'descending'):'none'}><button className="text-button" onClick={()=>{setSortKey('ip');setSortDir(sortKey==='ip'?-sortDir:1);}}>IP 地址 ↕</button></th>
                       <th>连接</th>
-                      <th>延迟</th>
-                      <th>{range === '24h' ? '24 小时' : '7 天'}流量</th>
+                      <th aria-sort={sortKey==='latency'?(sortDir===1?'ascending':'descending'):'none'}><button className="text-button" onClick={()=>{setSortKey('latency');setSortDir(sortKey==='latency'?-sortDir:1);}}>延迟 ↕</button></th>
+                      <th><button className="text-button" onClick={()=>{setSortKey('traffic');setSortDir(sortKey==='traffic'?-sortDir:-1);}}>{range === '24h' ? '24 小时' : '7 天'}流量 ↕</button></th>
                       <th />
                     </tr>
                   </thead>
@@ -885,6 +889,7 @@ export default function App() {
 
           {page === 'alerts' && (
             <>
+              {live && <Panel title="已暂停监测"><p>关闭监测不会清除事件；可在此重新开启。</p>{snapshot.devices.filter(d=>d.monitorDisabled).map(d=><div key={d.id}><span>{d.name} · {d.ip} </span><MonitoringButton devices={[d]} onMessage={setNotice}/></div>)}</Panel>}
               <div className="alert-summary">
                 <div>
                   <span className="summary-icon">
@@ -914,7 +919,7 @@ export default function App() {
                   >
                     <option value="all">全部事件</option>
                     <option value="active">当前异常</option>
-                    <option value="recovered">已恢复</option>
+                    <option value="recovered">已恢复</option><option value="paused">已暂停监测</option>
                   </select>
                 }
               >
@@ -923,7 +928,7 @@ export default function App() {
                     .filter(
                       (a) =>
                         alertFilter === 'all' ||
-                        (alertFilter === 'active' ? !a.recovered : a.recovered),
+                        (alertFilter === 'paused' ? a.paused : alertFilter === 'active' ? !a.recovered && !a.paused : a.recovered),
                     )
                     .map((a) => {
                       const action = alertActions[a.id];
@@ -945,7 +950,7 @@ export default function App() {
                               <strong>{a.title}</strong>
                               <small>
                                 {dateText(a.observedAt)} ·{' '}
-                                {a.recovered
+                                {a.paused ? '监测已暂停' : a.recovered
                                   ? '已恢复'
                                   : a.severity === 'critical'
                                     ? '严重'
@@ -955,7 +960,7 @@ export default function App() {
                             </span>
                             <ChevronDown size={18} />
                           </button>
-                          <p className="alert-summary-text">{a.summary}</p>
+                          <p className="alert-summary-text">{a.summary}</p><small>首次发生：{new Date(a.observedAt).toLocaleString('zh-CN')}{a.resolvedAt ? ` · 恢复：${new Date(a.resolvedAt).toLocaleString('zh-CN')}` : ''}</small>
                           {expandedAlert === a.id && (
                             <div className="diagnosis">
                               <div className="diagnosis-cause">
@@ -1049,9 +1054,9 @@ export default function App() {
                   {!snapshot.alerts.filter(
                     (a) =>
                       alertFilter === 'all' ||
-                      (alertFilter === 'active' ? !a.recovered : a.recovered),
+                      (alertFilter === 'paused' ? a.paused : alertFilter === 'active' ? !a.recovered && !a.paused : a.recovered),
                   ).length && (
-                    <Empty title="当前没有异常事件" text="可以切换演示场景，体验故障诊断过程。" />
+                    <Empty title="当前没有异常事件" text="没有当前事件；已暂停监测可在上方恢复。" />
                   )}
                 </div>
               </Panel>

@@ -20,6 +20,7 @@ import (
 )
 
 type deviceConfig struct {
+	Group           string `json:"group,omitempty"`
 	Icon            string `json:"icon,omitempty"`
 	CustomIcon      string `json:"customIcon,omitempty"`
 	MonitorDisabled bool   `json:"monitorDisabled"`
@@ -77,6 +78,7 @@ type runtimeEngine struct {
 	nameAt       time.Time
 	dir          string
 	probeMu      sync.Mutex
+	monitorEpoch map[string]uint64
 	pending      map[string]bool
 	slots        chan struct{}
 }
@@ -100,6 +102,7 @@ func validateConfig(c runtimeConfig) error {
 	seen := map[string]bool{}
 	parents := map[string]string{}
 	for _, d := range c.Devices {
+ if len([]rune(d.Group))>40 {return errors.New("分组名称最多 40 字")}
 		if seen[d.IP] {
 			return errors.New("设备 IP / 节点不能重复")
 		}
@@ -157,7 +160,7 @@ func openEngine(dir string) (*runtimeEngine, error) {
 		return nil, e
 	}
 	db.SetMaxOpenConns(1)
-	_, e = db.Exec(`PRAGMA journal_mode=WAL; PRAGMA busy_timeout=3000; CREATE TABLE IF NOT EXISTS device_meta(ip TEXT PRIMARY KEY,first_seen TEXT,last_scan TEXT,marked_at TEXT,hidden INTEGER DEFAULT 0); CREATE TABLE IF NOT EXISTS ui_layout(id TEXT PRIMARY KEY,payload TEXT); CREATE TABLE IF NOT EXISTS path_presence(id INTEGER PRIMARY KEY,payload TEXT); CREATE TABLE IF NOT EXISTS path_reports(id TEXT PRIMARY KEY,created INTEGER,payload TEXT); CREATE TABLE IF NOT EXISTS samples(ts INTEGER PRIMARY KEY,payload TEXT NOT NULL); CREATE TABLE IF NOT EXISTS usage(ts INTEGER,identity TEXT,rx REAL,tx REAL,PRIMARY KEY(ts,identity)); CREATE TABLE IF NOT EXISTS identities(mac TEXT PRIMARY KEY,ip TEXT,name TEXT,kind TEXT,model TEXT); CREATE INDEX IF NOT EXISTS usage_time ON usage(ts); CREATE TABLE IF NOT EXISTS accounting(ip TEXT PRIMARY KEY,rx REAL,tx REAL,ts INTEGER); CREATE TABLE IF NOT EXISTS events(ts INTEGER,identity TEXT,status TEXT); CREATE INDEX IF NOT EXISTS event_identity ON events(identity,ts);`)
+	_, e = db.Exec(`PRAGMA journal_mode=WAL; PRAGMA busy_timeout=3000; CREATE TABLE IF NOT EXISTS scan_baseline(id INTEGER PRIMARY KEY,payload TEXT); CREATE TABLE IF NOT EXISTS alert_records(id TEXT PRIMARY KEY,payload TEXT); CREATE TABLE IF NOT EXISTS scan_batches(ts TEXT PRIMARY KEY,payload TEXT); CREATE TABLE IF NOT EXISTS device_meta(ip TEXT PRIMARY KEY,first_seen TEXT,last_scan TEXT,marked_at TEXT,hidden INTEGER DEFAULT 0); CREATE TABLE IF NOT EXISTS ui_layout(id TEXT PRIMARY KEY,payload TEXT); CREATE TABLE IF NOT EXISTS path_presence(id INTEGER PRIMARY KEY,payload TEXT); CREATE TABLE IF NOT EXISTS path_reports(id TEXT PRIMARY KEY,created INTEGER,payload TEXT); CREATE TABLE IF NOT EXISTS samples(ts INTEGER PRIMARY KEY,payload TEXT NOT NULL); CREATE TABLE IF NOT EXISTS usage(ts INTEGER,identity TEXT,rx REAL,tx REAL,PRIMARY KEY(ts,identity)); CREATE TABLE IF NOT EXISTS identities(mac TEXT PRIMARY KEY,ip TEXT,name TEXT,kind TEXT,model TEXT); CREATE INDEX IF NOT EXISTS usage_time ON usage(ts); CREATE TABLE IF NOT EXISTS accounting(ip TEXT PRIMARY KEY,rx REAL,tx REAL,ts INTEGER); CREATE TABLE IF NOT EXISTS events(ts INTEGER,identity TEXT,status TEXT); CREATE INDEX IF NOT EXISTS event_identity ON events(identity,ts);`)
 	if e != nil {
 		db.Close()
 		return nil, e
@@ -264,7 +267,9 @@ func (e *runtimeEngine) sample() {
 		byIP[d["ip"].(string)] = d
 	}
 	if time.Since(e.discoveredAt) > 5*time.Minute {
+		previous := e.discovered
 		e.discovered = discoverLAN(c.Devices)
+		e.recordScan(previous, e.discovered, stamp)
 		e.discoveredAt = now
 	}
 	for ip, mac := range e.discovered {
@@ -340,11 +345,17 @@ func (e *runtimeEngine) sample() {
 		}
 		scheduled++
 		e.pending[ip] = true
+		epoch := e.monitorEpoch[ip]
 		go func(ip string) {
 			e.slots <- struct{}{}
 			p := probe(ip)
 			<-e.slots
 			e.probeMu.Lock()
+			if e.monitorEpoch[ip] != epoch {
+				delete(e.pending, ip)
+				e.probeMu.Unlock()
+				return
+			}
 			if !p.Success {
 				p.Failures = e.probes[ip].Failures + 1
 			}
@@ -470,6 +481,7 @@ func (e *runtimeEngine) sample() {
 			d["uploadMbps"] = rate.TX
 		}
 		d["identitySource"] = d["source"]
+		d["group"] = cfg.Group
 		d["icon"] = cfg.Icon
 		d["customIcon"] = cfg.CustomIcon
 		d["monitorDisabled"] = cfg.MonitorDisabled
@@ -552,7 +564,7 @@ func (e *runtimeEngine) sample() {
 	}
 	links, raw["pathMonitor"] = presence.decorate(byIP, byID, links, now, localIP())
 	raw["devices"] = devices
-	raw["alerts"] = diagnosticAlerts(c, probes, byID, e.writeError, stamp)
+	raw["alerts"] = e.eventHistory(c, probes, byID, e.writeError, stamp)
 	raw["links"] = links
 	raw["coverage"] = "后台持续采集 · 仅统计本机可见流量，历史自采集开始累计；物理接线按用户确认展示"
 	raw["integrations"] = integrationStatus(c)

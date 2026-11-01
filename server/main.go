@@ -29,7 +29,7 @@ import (
 
 //go:embed web/*
 var web embed.FS
-var version = "0.3.4"
+var version = "0.3.5"
 var sessionPattern = regexp.MustCompile(`^[a-fA-F0-9]{32}$`)
 
 const base = "/opt/homenet-doctor"
@@ -120,6 +120,7 @@ func main() {
 	mux.HandleFunc("/api/device", deviceAPI)
 	mux.HandleFunc("/api/inventory", inventoryAPI)
 	mux.HandleFunc("/api/layout", layoutAPI)
+	mux.HandleFunc("/api/changes", changesAPI)
 	mux.HandleFunc("/api/path-observation", pathObservationAPI)
 	mux.HandleFunc("/api/history", historyAPI)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

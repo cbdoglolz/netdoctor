@@ -9,6 +9,7 @@ async function deviceConfig(d: Device) {
   return (
     c.devices.find((v: { ip: string }) => v.ip === d.ip) || {
       ip: d.ip,
+      group: d.group || '',
       name: d.name,
       kind: d.kind,
       model: d.model,
@@ -137,7 +138,7 @@ export default function DeviceEditor({ device: d, live }: { device: Device; live
               ))}
             </select>
           </label>
-          <p>图标可与类型单独选择；备注不会推断真实连接。</p>
+          <label>拓扑分组<input maxLength={40} value={form.group||''} onChange={e=>setForm({...form,group:e.target.value})}/></label><p>分组仅用于显示，不代表接线关系。</p>
           <div className="icon-preset-grid">
             {Object.entries(kindLabels).map(([k, v]) => (
               <button

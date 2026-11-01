@@ -2581,3 +2581,5 @@ dd {
 .inventory-controls {padding:12px 18px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
 .inventory-controls small {flex-basis:100%;color:#8793a4;font-size:11px;}
 .topology-canvas:has(.layout-tools) .react-flow__controls { bottom: 95px; }
+.group-tools{position:absolute;top:55px;left:12px;right:12px;z-index:5;display:flex;gap:6px;flex-wrap:wrap;}
+.topology-canvas:has(.layout-tools) .react-flow__controls{bottom:155px;}

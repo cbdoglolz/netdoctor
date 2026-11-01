@@ -33,6 +33,7 @@ export interface Observation<T> {
   observedAt: string;
 }
 export interface Device {
+ group?: string;
   firstRecordedAt?: string;
   lastScannedAt?: string;
   annotatedAt?: string;
@@ -78,6 +79,8 @@ export interface TopologyLink {
   availability: Availability;
 }
 export interface Alert {
+ paused?: boolean;
+ resolvedAt?: string;
   id: string;
   title: string;
   severity: 'warning' | 'critical' | 'info';
